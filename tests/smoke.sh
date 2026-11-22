@@ -43,6 +43,7 @@ try_client() {
         if grep -q 'Initialization Sequence Completed' <<<"$logs"; then
             if [[ $expect == ok ]]; then
                 docker exec "$cid" ping -c 2 -W 2 10.99.0.1 >/dev/null || fail "$user conectó pero no hay tráfico por el túnel"
+                if grep -q 'Options error' <<<"$logs"; then fail "el cliente reporta 'Options error' en la configuración recibida"; fi
                 docker rm -f "$cid" >/dev/null
                 pass "$user se conecta y hay tráfico por el túnel"
                 return
@@ -54,7 +55,7 @@ try_client() {
     done
     docker rm -f "$cid" >/dev/null 2>&1 || true
     if [[ $expect == fail ]]; then
-        dc logs openvpn 2>&1 | grep -q 'certificate revoked' || fail "$user no conectó, pero el servidor no reporta revocación"
+        dc logs openvpn 2>&1 | grep 'certificate revoked' >/dev/null || fail "$user no conectó, pero el servidor no reporta revocación"
         pass "$user es rechazado (certificado revocado)"
     else
         echo "$logs" | tail -20
@@ -109,14 +110,14 @@ echo "== revocación en caliente y reemisión"
 cp "$WORK/alice.ovpn" "$SMOKE_CLIENT_DIR/client.ovpn"
 cid=$(dc --profile test run -d --rm --no-deps client)
 for _ in $(seq 1 30); do
-    docker logs "$cid" 2>&1 | grep -q 'Initialization Sequence Completed' && break
+    docker logs "$cid" 2>&1 | grep 'Initialization Sequence Completed' >/dev/null && break
     sleep 1
 done
-dc exec -T openvpn ovpnctl status | grep -q '^alice ' || fail "alice no aparece en ovpnctl status"
+dc exec -T openvpn ovpnctl status | grep '^alice ' >/dev/null || fail "alice no aparece en ovpnctl status"
 OVPN_USERS=alice dc exec -T openvpn ovpnctl users revoke alice
 gone=0
 for _ in $(seq 1 15); do  # status.log se refresca cada 10 s
-    if ! dc exec -T openvpn ovpnctl status | grep -q '^alice '; then gone=1 && break; fi
+    if ! dc exec -T openvpn ovpnctl status | grep '^alice ' >/dev/null; then gone=1 && break; fi
     sleep 2
 done
 ((gone)) || fail "alice sigue conectada tras revocarla"
@@ -126,6 +127,21 @@ dc exec -T openvpn ovpnctl users reissue alice
 dc exec -T openvpn ovpnctl export alice >"$WORK/alice.ovpn"
 try_client alice ok
 pass "reissue emite un perfil nuevo y funcional"
+
+echo "== backup y restauración"
+CA=(sh -c 'openssl x509 -in /etc/openvpn/pki/ca.crt -noout -fingerprint')
+ca_before=$(dc exec -T openvpn "${CA[@]}")
+SC=(-- -p ovpn-smoke --env-file "$ROOT/tests/smoke.env" -f "$ROOT/compose.yaml" -f "$ROOT/tests/compose.smoke.yaml")
+OVPN_USERS=alice "$ROOT/scripts/backup-pki.sh" backup --out "$WORK/bk" "${SC[@]}" >/dev/null 2>&1
+backup=$(ls "$WORK"/bk/*.tar.gz)
+tar -tzf "$backup" | grep 'pki/ca.crt$' >/dev/null || fail "el backup no contiene la CA"
+OVPN_USERS=alice dc down -v
+OVPN_USERS=alice "$ROOT/scripts/backup-pki.sh" restore "$backup" --yes "${SC[@]}" >/dev/null 2>&1
+OVPN_USERS=alice dc up -d openvpn
+wait_healthy
+[[ $(dc exec -T openvpn "${CA[@]}") == "$ca_before" ]] || fail "la CA restaurada no coincide"
+try_client alice ok
+pass "backup → borrar volumen → restore conserva la CA y los perfiles existentes"
 
 echo "== validación de configuración"
 if OVPN_USERS='mal usuario!' dc run --rm --no-deps -T openvpn ovpnctl users list >/dev/null 2>&1; then
