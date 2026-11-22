@@ -175,7 +175,7 @@ Desinstalar (no toca contenedores, PKI ni `.env`): `sudo ./scripts/install-host.
    docker image ls ghcr.io/editech-dev/openvpn   # la candidata fallida queda como :latest-failed
    ```
 3. Prueba de nuevo, quizá ya con el parche corregido: `make update-unfreeze && ./scripts/auto-update.sh --force`.
-4. Si el problema persiste, mantén la pausa hasta que salga una versión corregida de Alpine. Borra `:latest-failed` cuando ya no lo necesites: `docker rmi ghcr.io/editech-dev/openvpn:latest-failed`.
+4. Si el problema persiste, mantén la pausa hasta que salga una versión corregida de Alpine. `--unfreeze` borra la imagen `:latest-failed`.
 
 ---
 

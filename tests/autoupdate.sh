@@ -131,6 +131,8 @@ expect_msg "$m" 'Error al actualizar' "aviso de error"
 expect_msg "$m" 'Versión: OpenVPN .* → OpenVPN ' "versión anterior → intentada"
 expect_msg "$m" 'Error: simulación de fallo' "motivo"
 expect_msg "$m" 'sigue funcionando con la versión anterior' "resultado de la vuelta atrás"
+docker image inspect "$IMG-candidate" >/dev/null 2>&1 && fail "quedó la imagen candidata tras el fallo"
+docker image inspect "$IMG-failed" >/dev/null 2>&1 || fail "no conservó la imagen fallida para revisarla"
 pass "vuelve a la versión anterior, se pausa y avisa del error"
 
 echo "== en pausa: no actualiza ni avisa hasta --unfreeze"
@@ -141,6 +143,7 @@ grep 'Congelado' "$WORK/out" >/dev/null || fail "actualizó estando en pausa"
 update --status 2>&1 | grep 'CONGELADO' >/dev/null || fail "--status no muestra la pausa"
 update --unfreeze 2>/dev/null
 [[ ! -f $AUTOUPDATE_STATE_DIR/frozen ]] || fail "--unfreeze no reanudó"
+docker image inspect "$IMG-failed" >/dev/null 2>&1 && fail "--unfreeze no borró la imagen fallida"
 [[ -z $(sent_since "$m") ]] || fail "envió mensajes que no son de actualización"
 pass "pausa respetada sin mensajes; --unfreeze la reanuda"
 

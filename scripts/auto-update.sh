@@ -144,6 +144,7 @@ rollback_and_freeze() {
     PHASE=rollback
     log "FALLO: $reason. Volviendo a la versión anterior"
     docker tag "$CANDIDATE" "$FAILED" 2>/dev/null || true
+    docker rmi "$CANDIDATE" >/dev/null 2>&1 || true
     if deploy "$ROLLBACK" && verify "$ROLLBACK_ID" 180; then
         result="La VPN sigue funcionando con la versión anterior. Actualizaciones en pausa hasta revisarlo."
     else
@@ -211,6 +212,8 @@ main() {
         unfreeze)
             if [[ -f $FROZEN ]]; then
                 rm -f "$FROZEN"
+                init_images
+                docker rmi "$FAILED" >/dev/null 2>&1 || true
                 log "Actualizaciones reanudadas"
             else
                 log "No estaban congeladas"
