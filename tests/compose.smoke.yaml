@@ -1,0 +1,16 @@
+# Overlay para pruebas: no publica puertos y añade un cliente OpenVPN real.
+services:
+  openvpn:
+    ports: !reset []
+
+  client:
+    image: ghcr.io/editech-dev/openvpn:smoke
+    pull_policy: never
+    profiles: [test]
+    depends_on: [openvpn]
+    cap_add: [NET_ADMIN]
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ${SMOKE_CLIENT_DIR:?}:/client:ro
+    command: ["openvpn", "--config", "/client/client.ovpn"]
