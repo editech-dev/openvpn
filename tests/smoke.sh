@@ -118,7 +118,12 @@ for _ in $(seq 1 30); do
     docker logs "$cid" 2>&1 | grep 'Initialization Sequence Completed' >/dev/null && break
     sleep 1
 done
-dc exec -T openvpn ovpnctl status | grep '^alice ' >/dev/null || fail "alice no aparece en ovpnctl status"
+seen=0
+for _ in $(seq 1 15); do # status.log se refresca cada 10 s
+    if dc exec -T openvpn ovpnctl status | grep '^alice ' >/dev/null; then seen=1 && break; fi
+    sleep 2
+done
+((seen)) || fail "alice no aparece en ovpnctl status"
 OVPN_USERS=alice dc exec -T openvpn ovpnctl users revoke alice
 gone=0
 for _ in $(seq 1 15); do  # status.log se refresca cada 10 s
