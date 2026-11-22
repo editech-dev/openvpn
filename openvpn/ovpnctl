@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# CLI de administración dentro del contenedor.
+set -Eeuo pipefail
+
+LIB=/usr/local/lib/ovpn
+# shellcheck source=openvpn/lib/common.sh
+. "$LIB/common.sh"
+# shellcheck source=openvpn/lib/pki.sh
+. "$LIB/pki.sh"
+# shellcheck source=openvpn/lib/users.sh
+. "$LIB/users.sh"
+# shellcheck source=openvpn/lib/render.sh
+. "$LIB/render.sh"
+
+usage() {
+    cat <<'USAGE'
+Uso: ovpnctl <comando>
+
+  users list               Lista usuarios (estado, si están en OVPN_USERS, vencimiento)
+  users active             Nombres de usuarios exportables (uno por línea)
+  users sync               Sincroniza la PKI con OVPN_USERS (alta/revocación)
+  users revoke <usuario>   Revoca un usuario inmediatamente y lo desconecta
+  users reissue <usuario>  Revoca y emite un certificado nuevo (renovación / re-alta)
+  export <usuario>         Imprime el perfil .ovpn del usuario por stdout
+  status                   Clientes conectados
+  config                   Muestra la configuración generada del servidor
+USAGE
+}
+
+main() {
+    load_config
+    pki_env
+    [[ -f $EASYRSA_PKI/ca.crt ]] || die "La PKI no está inicializada: arranca el servicio una vez"
+    case "${1:-}" in
+        users)
+            case "${2:-}" in
+                list) users_list ;;
+                active) users_active ;;
+                sync) with_lock users_sync ;;
+                revoke) with_lock users_revoke "${3:?Falta el usuario}" ;;
+                reissue) with_lock users_reissue "${3:?Falta el usuario}" ;;
+                *) usage; exit 2 ;;
+            esac
+            ;;
+        export) render_client "${2:?Falta el usuario}" ;;
+        status)
+            if [[ -r $OVPN_RUN_DIR/status.log ]]; then
+                printf '%-24s %-22s %-15s %s\n' USUARIO IP_REAL IP_VPN CONECTADO_DESDE
+                awk -F, '$1=="CLIENT_LIST"{printf "%-24s %-22s %-15s %s\n",$2,$3,$4,$8}' "$OVPN_RUN_DIR/status.log"
+            else
+                die "El servidor no está corriendo (no hay status.log)"
+            fi
+            ;;
+        config) cat "$OVPN_RUN_DIR/server.conf" ;;
+        -h | --help | help | "") usage ;;
+        *) usage; exit 2 ;;
+    esac
+}
+
+main "$@"
