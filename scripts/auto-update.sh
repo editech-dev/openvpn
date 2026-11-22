@@ -17,8 +17,11 @@ Uso: scripts/auto-update.sh [opción] [-- <args de docker compose>]
   --status             Estado: congelado o no, última ejecución, imágenes
   --unfreeze           Reanuda las actualizaciones tras revisar un fallo
 
-Si una actualización falla, la versión anterior se restaura, las actualizaciones quedan
-CONGELADAS y se envía un aviso por Telegram (NOTIFY_* en .env).
+Avisos por Telegram (NOTIFY_* en .env): solo dos tipos de mensaje.
+  ✅ Nueva versión instalada correctamente (versión anterior → nueva y paquetes)
+  🚨 Error al actualizar (versión anterior → la que se intentaba y el error); la versión
+     anterior se restaura y las actualizaciones quedan en pausa hasta --unfreeze.
+Las revisiones sin cambios no envían nada.
 USAGE
 }
 
@@ -44,6 +47,54 @@ image_id() { docker image inspect -f '{{.Id}}' "$1" 2>/dev/null; }
 
 packages_of() {
     docker run --rm --network none --entrypoint cat "$1" /usr/local/share/ovpn/packages.txt 2>/dev/null || true
+}
+
+# Versión resumida de una imagen, p. ej. "OpenVPN 2.7.7-r0 · Alpine 3.24.4".
+version_of() {
+    # shellcheck disable=SC2016 # se expande dentro del contenedor
+    docker run --rm --network none --entrypoint sh "$1" -c '
+        v=$(sed -n "s/^openvpn-\([0-9]\)/\1/p" /usr/local/share/ovpn/packages.txt 2>/dev/null)
+        [ -n "$v" ] || v=$(openvpn --version | awk "NR==1{print \$2}")
+        printf "OpenVPN %s · Alpine %s" "$v" "$(cat /etc/alpine-release)"' 2>/dev/null || echo "desconocida"
+}
+
+# Compara dos listas "nombre-versión-rN" y emite "• nombre: anterior → nueva".
+package_changes() { # archivo_anterior archivo_nuevo
+    awk '
+        function parse(s) {
+            n = split(s, p, "-"); name = p[1]
+            for (i = 2; i <= n - 2; i++) name = name "-" p[i]
+            ver = (n >= 3) ? p[n - 1] "-" p[n] : s
+        }
+        FNR == NR { parse($0); old[name] = ver; next }
+        { parse($0); new[name] = ver }
+        END {
+            for (k in new) {
+                if (!(k in old)) print "• " k ": (nuevo) → " new[k]
+                else if (old[k] != new[k]) print "• " k ": " old[k] " → " new[k]
+            }
+            for (k in old) if (!(k in new)) print "• " k ": " old[k] " → (eliminado)"
+        }' "$1" "$2" | sort
+}
+
+notify_success() {
+    is_true "$(env_get NOTIFY_ON_SUCCESS true)" || return 0
+    notify "✅ Nueva versión instalada correctamente
+Versión: $VERSION_FROM → $VERSION_TO
+Paquetes actualizados ($COUNT):
+$(head -n 25 <<<"$CHANGES")" || true
+}
+
+notify_error() { # error resultado [detalle]
+    local text="🚨 Error al actualizar
+Versión: $VERSION_FROM → ${VERSION_TO:-(no disponible)}
+Error: $1"
+    [[ -n ${3:-} ]] && text+="
+Detalle:
+$3"
+    text+="
+$2"
+    notify "$text" || true
 }
 
 # Espera a que todos los servicios estén sanos con la imagen esperada. Deja el detalle en VERIFY_DETAIL.
@@ -75,30 +126,34 @@ deploy() { # imagen
     dc up -d --remove-orphans >&2
 }
 
-# Restaura la imagen anterior, congela las actualizaciones y avisa.
+# Últimas líneas de log de los servicios que no quedaron sanos (según VERIFY_DETAIL).
+failing_logs() {
+    local entry svc out=""
+    for entry in ${VERIFY_DETAIL:-}; do
+        [[ $entry == *=* && $entry != *=healthy ]] || continue
+        svc=${entry%%=*}
+        [[ $svc == ovpnctl ]] && svc=openvpn
+        out+=$(dc logs --no-color --tail 5 "$svc" 2>&1 | tail -n 5 || true)$'\n'
+    done
+    printf '%s' "${out%$'\n'}"
+}
+
+# Restaura la imagen anterior, pausa las actualizaciones y avisa.
 rollback_and_freeze() {
-    local reason=$1 logs result
+    local reason=$1 detail=${2:-} result
     PHASE=rollback
-    logs=$(dc logs --no-color --tail 12 2>&1 | tail -n 24 || true)
     log "FALLO: $reason. Volviendo a la versión anterior"
     docker tag "$CANDIDATE" "$FAILED" 2>/dev/null || true
     if deploy "$ROLLBACK" && verify "$ROLLBACK_ID" 180; then
-        result="✅ Vuelta atrás completada: la VPN sigue funcionando con la versión anterior."
+        result="La VPN sigue funcionando con la versión anterior. Actualizaciones en pausa hasta revisarlo."
     else
-        result="❌ CRÍTICO: la versión anterior TAMPOCO quedó sana ($VERIFY_DETAIL). Revisa la VM cuanto antes."
+        result="❌ CRÍTICO: la versión anterior tampoco quedó sana (${VERIFY_DETAIL% }). Hay que revisar el servidor."
     fi
-    printf 'desde: %s\nmotivo: %s\nresultado: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$reason" "$result" >"$FROZEN"
-    touch "$STATE_DIR/frozen.reminded"
+    printf 'desde: %s\nversion: %s -> %s\nmotivo: %s\nresultado: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        "$VERSION_FROM" "${VERSION_TO:-?}" "$reason" "$result" >"$FROZEN"
     record "fallo: $reason"
-    log "$result Actualizaciones congeladas."
-    notify "🚨 Falló la actualización automática.
-Motivo: $reason
-$result
-Las actualizaciones automáticas quedan CONGELADAS hasta revisarlo.
-Para reanudar: ./scripts/auto-update.sh --unfreeze
-
-Últimos logs:
-$logs" || true
+    log "$result"
+    notify_error "$reason" "$result" "$detail"
     exit "$EXIT_HANDLED"
 }
 
@@ -108,8 +163,9 @@ on_error() {
     if [[ $PHASE == deploy ]]; then
         rollback_and_freeze "error inesperado del actualizador (línea $line)"
     fi
-    record "error inesperado (línea $line)"
-    notify "⚠️ Error inesperado en la actualización automática (línea $line, fase $PHASE). No se cambió nada en producción. Revisa: journalctl -u openvpn-autoupdate" || true
+    record "error inesperado (línea $line, fase $PHASE)"
+    notify_error "fallo inesperado del actualizador (línea $line, fase $PHASE)" \
+        "No se cambió nada: la VPN sigue con la versión actual. Detalle: journalctl -u openvpn-autoupdate"
     exit "$EXIT_HANDLED"
 }
 
@@ -154,9 +210,8 @@ main() {
         status) show_status && exit 0 ;;
         unfreeze)
             if [[ -f $FROZEN ]]; then
-                rm -f "$FROZEN" "$STATE_DIR/frozen.reminded"
+                rm -f "$FROZEN"
                 log "Actualizaciones reanudadas"
-                notify "▶️ Actualizaciones automáticas reanudadas." || true
             else
                 log "No estaban congeladas"
             fi
@@ -169,13 +224,7 @@ main() {
     trap 'on_error $LINENO' ERR
 
     if [[ -f $FROZEN ]]; then
-        log "Congelado: no se actualiza. $(sed -n 2p "$FROZEN")"
-        if [[ -z $(find "$STATE_DIR/frozen.reminded" -mtime -7 2>/dev/null) ]]; then
-            notify "⏸️ Recordatorio: las actualizaciones automáticas siguen CONGELADAS.
-$(cat "$FROZEN")
-Para reanudar: ./scripts/auto-update.sh --unfreeze" || true
-            touch "$STATE_DIR/frozen.reminded"
-        fi
+        log "Congelado: no se actualiza ($(sed -n 's/^motivo: //p' "$FROZEN")). Reanudar: --unfreeze"
         exit 0
     fi
     if ! is_true "$(env_get AUTOUPDATE_ENABLED true)" && [[ $mode == run ]]; then
@@ -197,23 +246,38 @@ Para reanudar: ./scripts/auto-update.sh --unfreeze" || true
         exit 0
     fi
 
+    VERSION_FROM=$(version_of "$current_id")
+    VERSION_TO=""
+
     PHASE=build
     log "Construyendo imagen candidata con los últimos parches de Alpine..."
-    local build_log
+    local build_log fails_file=$STATE_DIR/build-failures fails alert_after
     if ! build_log=$(docker build --build-arg "PATCH_STAMP=$(date -u +%Y%m%dT%H%M%SZ)" \
         -t "$CANDIDATE" "$PROJECT_DIR/openvpn" 2>&1); then
-        log "No se pudo construir la imagen; se mantiene la actual"
-        record "fallo de construcción (se mantiene la versión actual)"
-        notify "⚠️ La actualización automática no pudo construir la imagen nueva (¿sin acceso a los repositorios de Alpine?). La VPN sigue con la versión actual; se reintentará en la próxima ejecución.
-
-$(tail -n 8 <<<"$build_log")" || true
+        # Un fallo puntual (red, repositorio caído) no avisa: se reintenta en la próxima
+        # ejecución. Solo se avisa si se repite AUTOUPDATE_BUILD_FAIL_ALERT veces seguidas.
+        fails=$(($(cat "$fails_file" 2>/dev/null || echo 0) + 1))
+        echo "$fails" >"$fails_file"
+        alert_after=$(env_get AUTOUPDATE_BUILD_FAIL_ALERT 3)
+        log "No se pudo construir la imagen (intento $fails); se mantiene la actual"
+        record "fallo de construcción $fails (se mantiene la versión actual)"
+        if ((fails == alert_after)); then
+            notify_error "no se pudo construir la versión nueva en $fails intentos seguidos" \
+                "La VPN sigue funcionando con la versión actual; se seguirá intentando." \
+                "$(grep -iE 'error|fail|unable|temporary' <<<"$build_log" | tail -n 4)"
+        fi
         exit "$EXIT_HANDLED"
     fi
+    rm -f "$fails_file"
+    VERSION_TO=$(version_of "$CANDIDATE")
 
-    local changes count
-    changes=$(diff <(packages_of "$current_id") <(packages_of "$CANDIDATE") | sed -n 's/^> /  + /p; s/^< /  - /p' || true)
-    count=$(grep -c '^  +' <<<"$changes" || true)
-    if [[ -z $changes && $mode == run ]]; then
+    local old_list=$STATE_DIR/packages.old new_list=$STATE_DIR/packages.new
+    packages_of "$current_id" >"$old_list"
+    packages_of "$CANDIDATE" >"$new_list"
+    CHANGES=$(package_changes "$old_list" "$new_list")
+    COUNT=$(grep -c . <<<"$CHANGES" || true)
+    rm -f "$old_list" "$new_list"
+    if [[ -z $CHANGES && $mode == run ]]; then
         log "Sin parches nuevos: no se reinicia nada"
         docker rmi "$CANDIDATE" >/dev/null
         record "ok: sin cambios"
@@ -221,7 +285,7 @@ $(tail -n 8 <<<"$build_log")" || true
     fi
     if [[ $mode == dry ]]; then
         log "Simulación (--dry-run). Cambios de paquetes:"
-        printf '%s\n' "${changes:-  (ninguno)}"
+        printf 'Versión: %s → %s\n%s\n' "$VERSION_FROM" "$VERSION_TO" "${CHANGES:-  (ninguno)}"
         docker rmi "$CANDIDATE" >/dev/null
         exit 0
     fi
@@ -232,15 +296,15 @@ $(tail -n 8 <<<"$build_log")" || true
     docker tag "$current_id" "$ROLLBACK"
 
     PHASE=deploy
-    log "Desplegando ($count paquetes nuevos)..."
+    log "Desplegando $VERSION_FROM → $VERSION_TO ($COUNT paquetes cambiados)..."
     local cand_id
     cand_id=$(image_id "$CANDIDATE")
     deploy "$CANDIDATE"
     if ! verify "$cand_id"; then
-        rollback_and_freeze "la versión nueva no quedó sana (${VERIFY_DETAIL% })"
+        rollback_and_freeze "la versión nueva no quedó sana (${VERIFY_DETAIL% })" "$(failing_logs)"
     fi
     if [[ $mode == simulate ]]; then
-        rollback_and_freeze "simulación de fallo (--simulate-failure)"
+        rollback_and_freeze "simulación de fallo (prueba manual con --simulate-failure)"
     fi
 
     PHASE=cleanup
@@ -248,13 +312,11 @@ $(tail -n 8 <<<"$build_log")" || true
     if [[ -n $old_rollback && $old_rollback != "$current_id" && $old_rollback != "$cand_id" ]]; then
         docker rmi "$old_rollback" >/dev/null 2>&1 || true
     fi
-    record "ok: desplegados $count paquetes nuevos"
+    record "ok: $VERSION_FROM → $VERSION_TO ($COUNT paquetes)"
     log "Actualización aplicada y verificada"
-    if is_true "$(env_get NOTIFY_ON_SUCCESS true)"; then
-        notify "✅ Actualización automática aplicada y verificada ($count paquetes nuevos):
-$(head -n 30 <<<"${changes:-  (sin cambios de paquetes)}")" || true
-    fi
+    # Un --force sin paquetes nuevos no es una versión nueva: no se avisa.
+    ((COUNT > 0)) && notify_success
+    return 0
 }
-
 
 main "$@"

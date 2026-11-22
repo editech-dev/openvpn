@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Vigilante: avisa por Telegram cuando un servicio deja de estar sano y cuando se recupera.
-# Solo avisa en los CAMBIOS de estado (sin repetir). Lo ejecuta un timer de systemd.
+# Vigilante: registra en el journal cuando un servicio deja de estar sano y cuando se recupera
+# (solo en los CAMBIOS de estado) y envía el latido opcional (NOTIFY_HEARTBEAT_URL).
+# Por defecto NO escribe en Telegram, reservado a los avisos de actualización; con
+# NOTIFY_WATCHDOG=true también envía estos avisos. Lo ejecuta un timer de systemd.
 #   scripts/watchdog.sh          comprueba los servicios
 #   scripts/watchdog.sh --boot   avisa de que el servidor arrancó (reinicio)
 set -Eeuo pipefail
@@ -21,6 +23,15 @@ heartbeat() { # ok|fail
     curl -fsS --max-time 15 -o /dev/null --config - <<<"url = \"$url\"" || msg "No se pudo enviar el latido"
 }
 
+# Aviso del vigilante: siempre al journal; a Telegram solo con NOTIFY_WATCHDOG=true.
+alert() {
+    if is_true "$(env_get NOTIFY_WATCHDOG false)"; then
+        notify "$*" || true
+    else
+        msg "vigilante: ${*%%$'\n'*}"
+    fi
+}
+
 # Estado legible para el aviso.
 human() {
     case $1 in
@@ -39,14 +50,14 @@ check() {
         st=docker-caido
         prev=$(cat "$STATE_DIR/watch-docker" 2>/dev/null || echo ok)
         if [[ $prev != "$st" ]]; then
-            notify "⚠️ Docker no responde en el servidor: la VPN probablemente está caída." || true
+            alert "⚠️ Docker no responde en el servidor: la VPN probablemente está caída."
             echo "$st" >"$STATE_DIR/watch-docker"
         fi
         heartbeat fail
         return
     fi
     if [[ $(cat "$STATE_DIR/watch-docker" 2>/dev/null) == docker-caido ]]; then
-        notify "✅ Docker vuelve a responder." || true
+        alert "✅ Docker vuelve a responder."
         echo ok >"$STATE_DIR/watch-docker"
     fi
 
@@ -59,12 +70,12 @@ check() {
         [[ $st == healthy ]] || all_ok=0
         [[ $st == "$prev" ]] && continue
         if [[ $st == healthy ]]; then
-            notify "✅ $svc se recuperó (estaba: $(human "$prev"))." || true
+            alert "✅ $svc se recuperó (estaba: $(human "$prev"))."
         else
             logs=$(dc logs --no-color --tail 10 "$svc" 2>&1 | tail -n 10 || true)
-            notify "⚠️ $svc no está sano: $(human "$st") (antes: $(human "$prev")).
+            alert "⚠️ $svc no está sano: $(human "$st") (antes: $(human "$prev")).
 Últimos logs:
-$logs" || true
+$logs"
         fi
         echo "$st" >"$file"
     done
@@ -79,7 +90,7 @@ main() {
     chmod 700 "$STATE_DIR"
     case ${1:-} in
         --boot)
-            notify "🔄 El servidor arrancó (encendido o reinicio desde $(uptime -s 2>/dev/null || echo '?'), kernel $(uname -r))." || true
+            alert "🔄 El servidor arrancó (encendido o reinicio desde $(uptime -s 2>/dev/null || echo '?'), kernel $(uname -r))."
             ;;
         "")
             # Durante una actualización los reinicios son esperados: no se vigila.

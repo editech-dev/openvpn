@@ -300,7 +300,7 @@ Más detalles: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 │   ├── ovpn.sh
 │   ├── backup-pki.sh
 │   ├── auto-update.sh            # Actualización con verificación y vuelta atrás
-│   ├── watchdog.sh               # Vigilante: avisa de servicios caídos o recuperados
+│   ├── watchdog.sh               # Vigilante: registra servicios caídos o recuperados
 │   ├── notify.sh                 # Avisos por Telegram
 │   └── install-host.sh           # Instala timers de systemd y unattended-upgrades
 ├── tests/
@@ -334,7 +334,9 @@ Con `sudo ./scripts/install-host.sh` el servidor queda en piloto automático:
 
 - **Cada día** reconstruye la imagen con los últimos parches de Alpine. Si no hay paquetes nuevos **no reinicia nada**. Si los hay, despliega, comprueba que `openvpn` y `duckdns` quedan sanos y, si no, **vuelve sola a la versión anterior, congela las actualizaciones y te avisa por Telegram** con el motivo y los logs.
 - **El sistema operativo** se actualiza con `unattended-upgrades`, ampliado para incluir Docker y para reiniciar de madrugada solo cuando un parche lo requiere.
-- **Un vigilante** revisa los servicios cada 10 minutos y avisa cuando uno cae y cuando se recupera, además de cada arranque del servidor.
+- **Un vigilante** revisa los servicios cada 10 minutos y registra caídas y recuperaciones (opcionalmente también en Telegram).
+
+En el canal de Telegram solo se publican **dos tipos de mensaje**: ✅ versión nueva instalada correctamente o 🚨 error al actualizar, ambos con la versión anterior → nueva. Las revisiones sin novedades no envían nada.
 
 No depende de GitHub: solo necesita acceso a los repositorios de Alpine y Debian. Guía completa, incluida la creación del bot de Telegram: [docs/AUTO-UPDATE.md](docs/AUTO-UPDATE.md).
 

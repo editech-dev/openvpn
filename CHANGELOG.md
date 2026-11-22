@@ -6,7 +6,8 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 
 ### Añadido
 - **Actualización automática sin GitHub** (`scripts/auto-update.sh`): reconstruye la imagen en el host con los parches de Alpine y solo la despliega si hay paquetes nuevos. Verifica que los servicios quedan sanos y, si no, vuelve a la versión anterior, congela las actualizaciones y avisa.
-- **Avisos por Telegram** (`scripts/notify.sh`) y **vigilante** (`scripts/watchdog.sh`): fallos de actualización, servicios caídos o recuperados, arranques del servidor y latido opcional a healthchecks.io.
+- **Avisos por Telegram** (`scripts/notify.sh`, admite chat, grupo o canal): solo se publican dos mensajes, "✅ Nueva versión instalada correctamente" y "🚨 Error al actualizar", ambos con la versión anterior → nueva y los paquetes o el error.
+- **Vigilante** (`scripts/watchdog.sh`): registra en el journal las caídas y recuperaciones de los servicios y los arranques (publicarlos es opcional con `NOTIFY_WATCHDOG=true`), y envía un latido opcional a healthchecks.io.
 - `scripts/install-host.sh`: timers de systemd y `unattended-upgrades` ampliado (Docker y reinicio automático cuando hace falta).
 - Prueba automática de la actualización, la vuelta atrás, el congelado, el vigilante y los avisos (`tests/autoupdate.sh`), incluida en CI.
 

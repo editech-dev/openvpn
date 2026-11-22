@@ -134,6 +134,6 @@ sudo ./scripts/install-host.sh
 systemctl list-timers 'openvpn-*'
 ```
 
-Desde ese momento la VM reconstruye la imagen con los parches de Alpine cada día, con verificación y vuelta atrás. También actualiza el SO, Docker incluido, y reinicia cuando un parche lo requiere. Te avisa por Telegram de fallos, servicios caídos y reinicios. Guía completa en [AUTO-UPDATE.md](AUTO-UPDATE.md).
+Desde ese momento la VM reconstruye la imagen con los parches de Alpine cada día, con verificación y vuelta atrás. También actualiza el SO, Docker incluido, y reinicia cuando un parche lo requiere. En Telegram publica solo las versiones nuevas instaladas y los errores al actualizar. Guía completa en [AUTO-UPDATE.md](AUTO-UPDATE.md).
 
 > En una e2-micro (1 GB de RAM) la reconstrucción tarda menos de un minuto y no afecta al servicio. Los contenedores solo se reinician si hay paquetes nuevos (unos 10–15 s de reconexión para los clientes).

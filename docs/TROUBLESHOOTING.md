@@ -53,12 +53,13 @@ El usuario está revocado. Si debe tener acceso: añádelo a `OVPN_USERS` y ejec
 
 ## La actualización automática está congelada
 
-Llegó un aviso 🚨 y `make update-status` muestra `CONGELADO`: la última versión no quedó sana y se restauró la anterior, así que la VPN sigue funcionando. Revisa `journalctl -u openvpn-autoupdate -n 100` y, cuando quieras reintentar, ejecuta `make update-unfreeze && ./scripts/auto-update.sh --force`. Pasos detallados en [AUTO-UPDATE.md](AUTO-UPDATE.md#tras-un-aviso-de-fallo-).
+Llegó un mensaje 🚨 y `make update-status` muestra `CONGELADO`: la última versión no quedó sana y se restauró la anterior, así que la VPN sigue funcionando. Revisa `journalctl -u openvpn-autoupdate -n 100` y, cuando quieras reintentar, ejecuta `make update-unfreeze && ./scripts/auto-update.sh --force`. Pasos detallados en [AUTO-UPDATE.md](AUTO-UPDATE.md#tras-un-aviso-de-fallo-).
 
 ## No llegan los avisos de Telegram
 
 - `make notify-test`: si responde `Telegram sin configurar`, faltan `NOTIFY_TELEGRAM_TOKEN` o `NOTIFY_TELEGRAM_CHAT_ID` en `.env`.
-- `No se pudo enviar`: token o chat_id incorrectos, o no le has escrito nunca al bot (escríbele `/start`).
+- `No se pudo enviar`: token o chat_id incorrectos; en un canal, el bot no es administrador con permiso para publicar; en un chat privado, no le has escrito nunca al bot (escríbele `/start`).
+- Los avisos del vigilante (servicio caído, arranque) no se publican por defecto: actívalos con `NOTIFY_WATCHDOG=true`.
 - Los avisos de los timers quedan en el journal: `journalctl -u openvpn-watchdog -u openvpn-autoupdate -n 50`.
 
 ## Exportar falla con "no tiene un certificado activo"

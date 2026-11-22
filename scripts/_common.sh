@@ -142,7 +142,7 @@ notify() {
         msg "Aviso (Telegram sin configurar): ${text%%$'\n'*}"
         return 2
     fi
-    if ! [[ $token =~ ^[0-9]+:[A-Za-z0-9_-]+$ && $chat =~ ^-?[0-9]+$ ]]; then
+    if ! [[ $token =~ ^[0-9]+:[A-Za-z0-9_-]+$ && $chat =~ ^(-?[0-9]+|@[A-Za-z0-9_]{5,})$ ]]; then
         msg "NOTIFY_TELEGRAM_TOKEN o NOTIFY_TELEGRAM_CHAT_ID con formato inválido"
         return 1
     fi

@@ -71,8 +71,13 @@ expect_msg() { # marca patrón descripción
 }
 
 echo "== preparación"
-docker build -q -t "ghcr.io/editech-dev/openvpn:$OVPN_IMAGE_TAG" "$ROOT/openvpn" >/dev/null
-docker tag "ghcr.io/editech-dev/openvpn:$OVPN_IMAGE_TAG" "$SMOKE_MOCK_IMAGE"
+IMG="ghcr.io/editech-dev/openvpn:$OVPN_IMAGE_TAG"
+docker build -q -t "$IMG" "$ROOT/openvpn" >/dev/null
+docker tag "$IMG" "$SMOKE_MOCK_IMAGE"
+# "Versión anterior" simulada: la misma imagen con curl registrado en una versión vieja,
+# para que la próxima revisión detecte un paquete actualizado.
+printf 'FROM %s\nRUN sed -i "s/^curl-[0-9].*/curl-8.0.0-r0/" /usr/local/share/ovpn/packages.txt\n' "$IMG" |
+    docker build -q -t "$IMG" - >/dev/null
 dc --profile test up -d mock
 dc up -d
 wait_healthy
@@ -84,28 +89,36 @@ m=$(mark)
 expect_msg "$m" 'Prueba de avisos' "notify.sh --test"
 expect_msg "$m" 'vpn.example.test' "prefijo con el nombre de la instancia"
 pass "notify.sh envía por Telegram con el nombre de la instancia"
-m=$(mark)
-"$ROOT/scripts/watchdog.sh" --boot "${CARGS[@]}" 2>/dev/null
-expect_msg "$m" 'El servidor arranc' "aviso de arranque"
-pass "aviso de arranque del servidor"
 
-echo "== sin parches nuevos: no reinicia"
+echo "== versión nueva: despliega, verifica y avisa"
+old_img=$(img_of openvpn)
+m=$(mark)
+update 2>"$WORK/out" || fail "auto-update falló: $(cat "$WORK/out")"
+[[ $(img_of openvpn) != "$old_img" && $(img_of duckdns) == "$(img_of openvpn)" ]] || fail "no desplegó la imagen nueva en ambos servicios"
+wait_healthy
+expect_msg "$m" 'Nueva versión instalada correctamente' "aviso de éxito"
+expect_msg "$m" 'Versión: OpenVPN .* → OpenVPN ' "versión anterior → nueva"
+expect_msg "$m" 'curl: 8.0.0-r0 → ' "paquete actualizado con su versión"
+[[ $(sent_since "$m" | grep -c '^POST') == 1 ]] || fail "envió más de un mensaje"
+pass "una versión nueva se instala, se verifica y se avisa con versión anterior → nueva"
+
+echo "== sin parches nuevos: no reinicia ni avisa"
 before=$(cid_of openvpn)
+m=$(mark)
 update 2>"$WORK/out" || fail "auto-update falló: $(cat "$WORK/out")"
 grep 'Sin parches nuevos' "$WORK/out" >/dev/null || fail "no detectó la ausencia de cambios: $(cat "$WORK/out")"
 [[ $(cid_of openvpn) == "$before" ]] || fail "reinició el servicio sin haber cambios"
-pass "sin cambios de paquetes no se toca nada"
+[[ -z $(sent_since "$m") ]] || fail "avisó sin haber versión nueva"
+pass "sin cambios no se toca nada y no se envía ningún mensaje"
 
-echo "== --force: despliega y verifica"
-old_img=$(img_of openvpn)
+echo "== --force sin paquetes nuevos: despliega sin avisar"
 m=$(mark)
 update --force 2>"$WORK/out" || fail "auto-update --force falló: $(cat "$WORK/out")"
-[[ $(img_of openvpn) != "$old_img" && $(img_of duckdns) == "$(img_of openvpn)" ]] || fail "no desplegó la imagen nueva en ambos servicios"
 wait_healthy
-expect_msg "$m" 'aplicada y verificada' "aviso de éxito"
-pass "despliegue verificado y aviso de éxito"
+[[ -z $(sent_since "$m") ]] || fail "avisó de una versión nueva que no existe"
+pass "--force redepliega y verifica sin mensajes"
 
-echo "== --simulate-failure: vuelta atrás, congelado y aviso"
+echo "== --simulate-failure: vuelta atrás, pausa y aviso de error"
 good_img=$(img_of openvpn)
 m=$(mark)
 rc=0
@@ -113,19 +126,23 @@ update --simulate-failure 2>"$WORK/out" || rc=$?
 ((rc == 3)) || fail "código de salida $rc (esperado 3): $(cat "$WORK/out")"
 [[ $(img_of openvpn) == "$good_img" ]] || fail "no volvió a la imagen anterior"
 wait_healthy
-[[ -f $AUTOUPDATE_STATE_DIR/frozen ]] || fail "no quedó congelado"
-expect_msg "$m" 'CONGELADAS' "aviso de fallo"
-expect_msg "$m" 'Vuelta atr' "resultado de la vuelta atrás"
-pass "vuelve a la versión anterior, congela y avisa"
+[[ -f $AUTOUPDATE_STATE_DIR/frozen ]] || fail "no quedó en pausa"
+expect_msg "$m" 'Error al actualizar' "aviso de error"
+expect_msg "$m" 'Versión: OpenVPN .* → OpenVPN ' "versión anterior → intentada"
+expect_msg "$m" 'Error: simulación de fallo' "motivo"
+expect_msg "$m" 'sigue funcionando con la versión anterior' "resultado de la vuelta atrás"
+pass "vuelve a la versión anterior, se pausa y avisa del error"
 
-echo "== congelado: no actualiza hasta --unfreeze"
+echo "== en pausa: no actualiza ni avisa hasta --unfreeze"
+m=$(mark)
 update --force 2>"$WORK/out"
-grep 'Congelado' "$WORK/out" >/dev/null || fail "actualizó estando congelado"
-[[ $(img_of openvpn) == "$good_img" ]] || fail "cambió la imagen estando congelado"
-update --status 2>&1 | grep 'CONGELADO' >/dev/null || fail "--status no muestra el congelado"
+grep 'Congelado' "$WORK/out" >/dev/null || fail "actualizó estando en pausa"
+[[ $(img_of openvpn) == "$good_img" ]] || fail "cambió la imagen estando en pausa"
+update --status 2>&1 | grep 'CONGELADO' >/dev/null || fail "--status no muestra la pausa"
 update --unfreeze 2>/dev/null
 [[ ! -f $AUTOUPDATE_STATE_DIR/frozen ]] || fail "--unfreeze no reanudó"
-pass "congelado respetado; --unfreeze lo reanuda"
+[[ -z $(sent_since "$m") ]] || fail "envió mensajes que no son de actualización"
+pass "pausa respetada sin mensajes; --unfreeze la reanuda"
 
 echo "== fallo real de verificación (tiempo agotado)"
 m=$(mark)
@@ -133,16 +150,30 @@ rc=0
 AUTOUPDATE_VERIFY_TIMEOUT=0 update --force 2>"$WORK/out" || rc=$?
 ((rc == 3)) || fail "código de salida $rc (esperado 3)"
 grep 'no quedó sana' "$WORK/out" >/dev/null || fail "no detectó la versión no sana: $(cat "$WORK/out")"
-expect_msg "$m" 'CONGELADAS' "aviso de fallo real"
+expect_msg "$m" 'Error: la versión nueva no quedó sana' "aviso de fallo real"
+expect_msg "$m" 'Detalle:' "detalle del error"
 wait_healthy
 [[ $(img_of openvpn) == "$good_img" ]] || fail "no restauró la imagen anterior"
 update --unfreeze 2>/dev/null
-pass "una versión que no queda sana se revierte sola"
+pass "una versión que no queda sana se revierte sola y se informa el error"
 
-echo "== vigilante"
+echo "== vigilante (por defecto, sin mensajes en Telegram)"
 m=$(mark)
-watchdog
-[[ -z $(sent_since "$m") ]] || fail "avisó sin que hubiera cambios"
+dc stop duckdns
+watchdog 2>"$WORK/out"
+grep 'vigilante: .*duckdns no est' "$WORK/out" >/dev/null || fail "el vigilante no registró la caída: $(cat "$WORK/out")"
+[[ -z $(sent_since "$m") ]] || fail "el vigilante escribió en Telegram sin NOTIFY_WATCHDOG"
+"$ROOT/scripts/watchdog.sh" --boot "${CARGS[@]}" 2>/dev/null
+[[ -z $(sent_since "$m") ]] || fail "el aviso de arranque llegó a Telegram sin NOTIFY_WATCHDOG"
+dc start duckdns
+wait_healthy
+watchdog 2>"$WORK/out"
+grep 'vigilante: .*duckdns se recuper' "$WORK/out" >/dev/null || fail "no registró la recuperación"
+pass "el vigilante registra caídas y recuperaciones sin escribir en el canal"
+
+echo "== vigilante con NOTIFY_WATCHDOG=true"
+export NOTIFY_WATCHDOG=true
+m=$(mark)
 dc stop duckdns
 watchdog
 expect_msg "$m" 'duckdns no est' "servicio caído"
@@ -153,6 +184,7 @@ dc start duckdns
 wait_healthy
 watchdog
 expect_msg "$m" 'duckdns se recuper' "recuperación"
-pass "avisa de caída y recuperación, sin repetir"
+unset NOTIFY_WATCHDOG
+pass "opcional: avisa de caída y recuperación, sin repetir"
 
 printf '\n\033[32mPruebas de actualización automática superadas\033[0m\n'
