@@ -116,7 +116,7 @@ scp -i <LLAVE_SSH> '<USUARIO>@<IP_VM>:openvpn/backups/*' backups/ && chmod 600 b
 | Reinicio del contenedor (`docker compose restart openvpn`) | Apagado limpio en ~3 s; clientes reconectados en ~11 s |
 | Caída del servidor > 60 s | Los clientes reintentan cada ≤30 s y reconectan ~3 s después de que vuelve |
 | Reinicio de la VM / detener e iniciar | Docker y los servicios arrancan solos; clientes reconectados ~15 s después |
-| Cambio de IP del servidor | DuckDNS se actualiza al arrancar; los clientes re-resuelven el dominio y reconectan |
+| Cambio de IP del servidor | DuckDNS se actualiza al arrancar; si la IP anterior no responde en 10 s, el cliente re-resuelve el dominio y reconecta (~15 s en pruebas) |
 
 Mientras el servidor está caído, el cliente retira las rutas de la VPN para poder volver a resolver el dominio. Durante ese intervalo el tráfico sale por la conexión normal del cliente. Si prefieres bloquearlo, consulta `OVPN_CLIENT_PERSIST_TUN` en [CONFIG.md](CONFIG.md).
 

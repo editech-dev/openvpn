@@ -21,4 +21,5 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - `grep -q` con `pipefail` provocaba falsos negativos (riesgo de reemitir certificados).
 - `block-outside-dns` se enviaba a todos los clientes y producía `Options error` fuera de Windows.
 - tini no podía reenviar `SIGTERM` a OpenVPN (faltaba `CAP_KILL`): apagado forzado y clientes ~2 min sin servicio.
+- Tras un reinicio del servidor el cliente insistía 60 s en la IP anterior antes de re-resolver el dominio; ahora `server-poll-timeout 10` (cambio de IP: de ~67 s a ~15 s).
 - Con `persist-tun` en el perfil, un cliente en full tunnel no podía re-resolver el dominio y quedaba colgado tras una caída o un cambio de IP.

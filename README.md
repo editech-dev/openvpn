@@ -80,7 +80,7 @@ Hay **dos servicios**:
 ### Qué pasa si el servidor se cae o cambia de IP
 
 - Al detenerse, el servidor avisa a los clientes para que reconecten de inmediato.
-- Los clientes reintentan cada 2–30 s y **vuelven a resolver el dominio** en cada intento, así que encuentran al servidor aunque su IP haya cambiado (DuckDNS la actualiza al arrancar y luego cada 5 minutos).
+- Los clientes reintentan cada 2–30 s; si la IP conocida no responde en 10 s (`server-poll-timeout`), **vuelven a resolver el dominio**, así que encuentran al servidor aunque su IP haya cambiado (DuckDNS la actualiza al arrancar y luego cada 5 minutos).
 - Mientras reconectan, retiran las rutas de la VPN (`OVPN_CLIENT_PERSIST_TUN=false`): sin eso, en full tunnel la consulta DNS iría a un túnel caído y el cliente nunca se recuperaría.
 
 ### Por qué una imagen propia

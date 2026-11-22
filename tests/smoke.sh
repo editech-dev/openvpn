@@ -81,6 +81,7 @@ if grep -x 'persist-tun' "$WORK/alice.ovpn" >/dev/null; then
     fail "el perfil incluye persist-tun: impediría re-resolver el dominio si cambia la IP"
 fi
 grep -x 'connect-retry 2 30' "$WORK/alice.ovpn" >/dev/null || fail "el perfil no limita la espera entre reintentos"
+grep -x 'server-poll-timeout 10' "$WORK/alice.ovpn" >/dev/null || fail "el perfil no limita la espera a una IP que no responde"
 pass "perfiles exportados con material inline"
 "$ROOT/scripts/export-clients.sh" --project-dir "$ROOT" --out "$WORK/exports" \
     -- -p ovpn-smoke --env-file "$ROOT/tests/smoke.env" -f "$ROOT/compose.yaml" -f "$ROOT/tests/compose.smoke.yaml" >/dev/null
@@ -180,7 +181,7 @@ done
 docker logs "$cid" 2>&1 | grep 'link remote: \[AF_INET\]172.30.99.10' >/dev/null || fail "el cliente no conectó a la IP inicial"
 OVPN_USERS=alice SMOKE_SERVER_IP=172.30.99.20 dc up -d openvpn
 moved=0
-for _ in $(seq 1 60); do
+for _ in $(seq 1 40); do # server-poll-timeout 10: debe seguir al servidor en ~15 s
     if docker logs "$cid" 2>&1 | grep 'link remote: \[AF_INET\]172.30.99.20' >/dev/null &&
         docker exec "$cid" ping -c 1 -W 2 10.99.0.1 >/dev/null 2>&1; then
         moved=1 && break

@@ -71,6 +71,8 @@ proto ${OVPN_PROTO}
 remote ${OVPN_HOSTNAME} ${OVPN_PORT}
 resolv-retry infinite
 connect-retry 2 30
+# Si la IP conocida no responde en 10 s, se vuelve a resolver el dominio (IP cambiada).
+server-poll-timeout 10
 nobind
 $(is_true "$OVPN_CLIENT_PERSIST_TUN" && echo persist-tun)
 remote-cert-tls server
