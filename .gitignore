@@ -1,0 +1,22 @@
+# Configuración local y secretos
+.env
+.env.*
+!.env.example
+secrets/
+compose.override.yaml
+
+# Perfiles de cliente y backups (contienen llaves privadas)
+exports/
+backups/
+*.ovpn
+*.key
+*.pem
+*.tar.gz
+*.tar.gz.age
+*.tar.gz.gpg
+
+# Editor / SO
+.DS_Store
+.idea/
+.vscode/
+*.swp
