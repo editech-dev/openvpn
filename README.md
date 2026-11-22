@@ -11,7 +11,8 @@ Servidor **OpenVPN** portable con **DNS dinámico (DuckDNS)**, configurable 100 
 - 📦 **Script de exportación** de los perfiles `.ovpn` listos para importar en cualquier cliente.
 - 🌐 DuckDNS mantiene tu dominio apuntando a tu IP pública aunque cambie.
 - 🛡️ Contenedor endurecido: sistema de archivos de solo lectura, capacidades mínimas, OpenVPN corriendo como `nobody`.
-- ✅ Probado en CI con un cliente OpenVPN real (conexión, revocación y persistencia).
+- 🔁 Reconexión automática: los clientes vuelven solos tras reinicios, caídas o un cambio de IP del servidor.
+- ✅ Probado en CI con un cliente OpenVPN real (conexión, revocación, persistencia, backup/restore y cambio de IP), y en producción en una VM en la nube.
 
 ---
 
@@ -76,6 +77,12 @@ Hay **dos servicios**:
 6. **Configura el NAT** (`MASQUERADE`) para que los clientes salgan a Internet/LAN a través del servidor.
 7. **Arranca OpenVPN**, que baja privilegios a `nobody`. Si el kernel del host lo soporta, se usa **DCO** (Data Channel Offload) para mayor rendimiento.
 
+### Qué pasa si el servidor se cae o cambia de IP
+
+- Al detenerse, el servidor avisa a los clientes para que reconecten de inmediato.
+- Los clientes reintentan cada 2–30 s y **vuelven a resolver el dominio** en cada intento, así que encuentran al servidor aunque su IP haya cambiado (DuckDNS la actualiza al arrancar y luego cada 5 minutos).
+- Mientras reconectan, retiran las rutas de la VPN (`OVPN_CLIENT_PERSIST_TUN=false`): sin eso, en full tunnel la consulta DNS iría a un túnel caído y el cliente nunca se recuperaría.
+
 ### Por qué una imagen propia
 
 La imagen popular `kylemanna/openvpn` lleva años sin mantenimiento (easy-rsa y OpenSSL antiguos). Esta imagen es pequeña, auditable (unos cientos de líneas de Bash), se reconstruye con cada parche de Alpine, se publica para `amd64`, `arm64` y `arm/v7`, y va firmada con cosign y con SBOM.
@@ -118,7 +125,7 @@ make export          # genera exports/<usuario>.ovpn
    - Android/iOS: OpenVPN Connect (importar archivo).
 7. Prueba **desde otra red** (por ejemplo, datos móviles): conéctate y verifica que tu IP pública es la del servidor.
 
-Guía detallada paso a paso: [docs/INSTALL.md](docs/INSTALL.md).
+Guía detallada paso a paso: [docs/INSTALL.md](docs/INSTALL.md). En una VM en la nube: [docs/DEPLOY-CLOUD.md](docs/DEPLOY-CLOUD.md).
 
 ---
 
@@ -212,6 +219,7 @@ Todas se definen en `.env` (plantilla documentada en [`.env.example`](.env.examp
 | `OVPN_CA_CN` | `openvpn-ca` | Nombre de la CA (solo al crear la PKI). |
 | `OVPN_CIPHERS` | `AES-256-GCM:CHACHA20-POLY1305:AES-128-GCM` | Cifrados de datos negociables. |
 | `OVPN_EXTRA_SERVER_CONFIG` | — | Directivas extra para `server.conf`, separadas por `\|`. |
+| `OVPN_CLIENT_PERSIST_TUN` | `false` | `false`: al reconectar se retiran las rutas de la VPN para poder re-resolver el dominio (necesario con DNS dinámico). `true`: sin tráfico fuera de la VPN durante la reconexión, pero no se recupera si cambia la IP del servidor. |
 | `OVPN_VERB` | `3` | Verbosidad de logs (0–11). |
 | `OVPN_IMAGE_TAG` | `latest` | Versión de la imagen publicada (ej. `1.0.0`). |
 | `OVPN_PULL_POLICY` | `missing` | Política de descarga de la imagen (`missing`, `always`, `never`, `build`). |
@@ -320,6 +328,7 @@ Convenciones: [Conventional Commits](https://www.conventionalcommits.org/es/), [
 ## Documentación adicional
 
 - [docs/INSTALL.md](docs/INSTALL.md): instalación paso a paso (DuckDNS, router, firewall, verificación).
+- [docs/DEPLOY-CLOUD.md](docs/DEPLOY-CLOUD.md): despliegue probado en una VM en la nube (Google Cloud) y comportamiento ante caídas.
 - [docs/CONFIG.md](docs/CONFIG.md): configuraciones típicas.
 - [docs/OPERATIONS.md](docs/OPERATIONS.md): operación diaria, actualizaciones, backups y migración.
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md): problemas frecuentes.

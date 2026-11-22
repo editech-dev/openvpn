@@ -3,8 +3,10 @@
 ## 1. Preparar el host
 
 ```bash
-# Docker Engine + Compose v2 (Debian/Ubuntu/Raspberry Pi OS)
+# Docker Engine + Compose v2 (Debian/Ubuntu/Raspberry Pi OS).
+# Alternativa sin ejecutar scripts descargados: repositorio APT oficial, ver DEPLOY-CLOUD.md
 curl -fsSL https://get.docker.com | sh
+sudo apt-get install -y make      # opcional: atajos "make ..."
 sudo usermod -aG docker "$USER"   # cierra sesión y vuelve a entrar
 docker compose version
 ls -l /dev/net/tun                # debe existir

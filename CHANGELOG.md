@@ -13,3 +13,12 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 - Contenedor endurecido (read-only, `cap_drop: ALL`, `no-new-privileges`, OpenVPN como `nobody`), soporte DCO.
 - Pruebas unitarias (bats) y prueba end-to-end con cliente real.
 - CI (lint, gitleaks, tests, Trivy) y release multi-arquitectura a GHCR con SBOM y firma cosign.
+- `OVPN_CLIENT_PERSIST_TUN` para elegir el comportamiento del cliente al reconectar.
+- Guía de despliegue en la nube (`docs/DEPLOY-CLOUD.md`), validada en una VM real.
+
+### Corregido (encontrado en pruebas de despliegue real)
+- El backup quedaba corrupto si Compose construía la imagen durante el `run`; ahora se valida antes de guardar y de restaurar.
+- `grep -q` con `pipefail` provocaba falsos negativos (riesgo de reemitir certificados).
+- `block-outside-dns` se enviaba a todos los clientes y producía `Options error` fuera de Windows.
+- tini no podía reenviar `SIGTERM` a OpenVPN (faltaba `CAP_KILL`): apagado forzado y clientes ~2 min sin servicio.
+- Con `persist-tun` en el perfil, un cliente en full tunnel no podía re-resolver el dominio y quedaba colgado tras una caída o un cambio de IP.

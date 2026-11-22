@@ -57,6 +57,17 @@ OVPN_PULL_POLICY=missing
 
 `latest` o un tag no publicado hacen que la imagen se construya localmente desde `./openvpn`. Para forzar la construcción local: `OVPN_PULL_POLICY=build`.
 
+## Comportamiento del cliente al reconectar
+
+```dotenv
+OVPN_CLIENT_PERSIST_TUN=false   # por defecto
+```
+
+- `false` (recomendado con DuckDNS): si se cae la conexión, el cliente retira las rutas de la VPN, vuelve a resolver el dominio y encuentra al servidor aunque haya cambiado de IP. Mientras tanto, su tráfico sale por la conexión normal.
+- `true`: el cliente conserva la interfaz y las rutas, así que no sale tráfico fuera de la VPN durante la reconexión. Con full tunnel la consulta DNS no tiene salida: **si la IP del servidor cambia, el cliente no se recupera** hasta que lo reconectes a mano. Úsalo solo con IP fija.
+
+Tras cambiarlo, vuelve a exportar los perfiles.
+
 ## Directivas extra
 
 `OVPN_EXTRA_SERVER_CONFIG` añade líneas al final de `server.conf`, separadas por `|`:

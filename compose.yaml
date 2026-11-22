@@ -1,6 +1,10 @@
 # Despliegue: cp .env.example .env && editar && docker compose up -d
 # Todas las variables están documentadas en .env.example y docs/CONFIG.md.
 
+# Nombre fijo: el volumen de la PKI se llama siempre openvpn_ovpn-data, aunque la
+# carpeta se renombre. Se puede cambiar con COMPOSE_PROJECT_NAME o "-p".
+name: openvpn
+
 x-logging: &logging
   driver: json-file
   options:

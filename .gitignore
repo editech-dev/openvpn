@@ -20,3 +20,6 @@ backups/
 .idea/
 .vscode/
 *.swp
+
+# Notas privadas de despliegue (IPs, proyecto, usuarios reales)
+*.local.md

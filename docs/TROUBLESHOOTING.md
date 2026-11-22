@@ -21,6 +21,14 @@ Mira el primer `[ERROR]` en `docker compose logs openvpn`:
 4. **CG-NAT:** si la IP WAN de tu router (en su panel) es distinta de `ifconfig.me`, o empieza por `100.64.`–`100.127.`, tu proveedor usa CG-NAT y no puedes recibir conexiones entrantes. Pide una IP pública a tu ISP o usa un VPS como punto de entrada.
 5. ¿El perfil es actual? Si cambiaste `OVPN_HOSTNAME`, `OVPN_PORT`, `OVPN_PROTO` o reemitiste el usuario, vuelve a exportarlo.
 
+## El cliente se queda en `RESOLVE: Cannot resolve host address`
+
+El cliente no puede resolver el dominio mientras reconecta. Si el perfil contiene `persist-tun` (perfiles antiguos o `OVPN_CLIENT_PERSIST_TUN=true`), las rutas del túnel caído capturan el DNS. Vuelve a exportar el perfil con `OVPN_CLIENT_PERSIST_TUN=false` (valor por defecto).
+
+## VM en la nube: no conecta nadie
+
+El firewall del proveedor bloquea el puerto. En Google Cloud crea la regla para UDP 1194 y la etiqueta de red en la VM (ver [DEPLOY-CLOUD.md](DEPLOY-CLOUD.md)). Comprueba también que `docker compose ps` muestra `0.0.0.0:1194->1194/udp`.
+
 ## `VERIFY ERROR … certificate revoked`
 
 El usuario está revocado. Si debe tener acceso: añádelo a `OVPN_USERS` y ejecuta `./scripts/ovpn.sh users reissue <usuario>`.

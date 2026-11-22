@@ -19,6 +19,7 @@ No abras un issue público. Usa **[Report a vulnerability](https://github.com/ed
 
 - Las llaves de la CA y de los clientes **no tienen passphrase**, para permitir la emisión y revocación automáticas. Quien tenga acceso al volumen `ovpn-data` (o a un backup sin cifrar) puede emitir certificados. Protege el host y cifra los backups.
 - La CRL se regenera en cada cambio con 10 años de vigencia; se renueva en cada arranque.
+- Con `OVPN_CLIENT_PERSIST_TUN=false` (por defecto), mientras el cliente reconecta su tráfico sale por la conexión normal durante unos segundos. Es necesario para volver a resolver el dominio si la IP del servidor cambia. Con IP fija puedes usar `true` para evitarlo.
 - No se gestiona IPv6 dentro del túnel. En full tunnel, un cliente con IPv6 podría enviar ese tráfico fuera de la VPN; desactiva IPv6 en el cliente si te importa.
 
 ## Recomendaciones para producción

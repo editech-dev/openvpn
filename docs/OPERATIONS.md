@@ -73,6 +73,10 @@ make up
 
 Apaga el servidor antiguo (o su `duckdns`) para que ambos no actualicen el mismo subdominio.
 
+## Varias instancias en el mismo host
+
+El proyecto Compose se llama `openvpn` (fijado en `compose.yaml`), y la PKI vive en el volumen `openvpn_ovpn-data` aunque renombres la carpeta. Para una segunda instancia independiente usa otro nombre: `COMPOSE_PROJECT_NAME=vpn2` en su `.env` (y otro `OVPN_PORT`).
+
 ## Empezar de cero (nueva CA)
 
 ⚠️ Invalida **todos** los perfiles existentes.
