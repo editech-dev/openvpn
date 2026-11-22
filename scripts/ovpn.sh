@@ -15,9 +15,14 @@ Uso: scripts/ovpn.sh <comando>
   status                   Clientes conectados
   config                   Configuración generada del servidor
   logs                     Sigue los logs de OpenVPN
+
+Acepta al final "-- <args de docker compose>" (ej. -- -p otro-proyecto).
 USAGE
 }
 
+args=()
+split_compose_args args "$@"
+set -- "${args[@]}"
 require_docker
 case ${1:-} in
     apply) dc up -d --remove-orphans ;;

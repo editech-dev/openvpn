@@ -11,6 +11,8 @@ Uso:
   scripts/backup-pki.sh backup  [--out DIR] [--age-recipient CLAVE | --gpg]
   scripts/backup-pki.sh restore ARCHIVO --yes
 
+  Ambos aceptan al final "-- <args de docker compose>" (ej. -- -p otro-proyecto).
+
   --out DIR            Carpeta destino (por defecto: ./backups)
   --age-recipient K    Cifra con age para la clave pública K (recomendado)
   --gpg                Cifra con gpg simétrico (pide contraseña)
@@ -34,7 +36,11 @@ backup() {
     mkdir -p "$out"
     local file
     file="$out/openvpn-pki-$(date +%Y%m%d-%H%M%S).tar.gz"
-    dc run --rm --no-deps -T --entrypoint tar openvpn -czf - -C /etc/openvpn . >"$file"
+    run_oneoff --entrypoint tar openvpn -czf - -C /etc/openvpn . >"$file"
+    if ! tar -tzf "$file" 2>/dev/null | grep 'pki/ca.crt$' >/dev/null; then
+        rm -f "$file"
+        die "El backup no contiene una PKI válida (¿el servicio se ha iniciado alguna vez en este proyecto?)"
+    fi
     if [[ -n $age_rcpt ]]; then
         command -v age >/dev/null || die "age no está instalado"
         age -r "$age_rcpt" -o "$file.age" "$file" && rm -f "$file" && file="$file.age"
@@ -51,18 +57,26 @@ restore() {
     local file=${1:-} yes=${2:-}
     [[ -f $file ]] || die "Archivo no encontrado: $file"
     [[ $yes == --yes ]] || die "La restauración sobrescribe la PKI actual. Repite con --yes"
-    local stream
+    # Se descifra a un temporal privado y se valida ANTES de tocar la PKI actual.
+    umask 077
+    local plain
+    plain=$(mktemp)
+    trap 'rm -f "$plain"' RETURN
     case $file in
-        *.age) stream=(age -d "$file") ;;
-        *.gpg) stream=(gpg -d "$file") ;;
-        *) stream=(cat "$file") ;;
+        *.age) age -d -o "$plain" "$file" ;;
+        *.gpg) gpg -d -o "$plain" --yes "$file" ;;
+        *) cp "$file" "$plain" ;;
     esac
+    tar -tzf "$plain" 2>/dev/null | grep 'pki/ca.crt$' >/dev/null || die "El archivo no es un backup válido de la PKI"
     dc stop openvpn >/dev/null 2>&1 || true
-    "${stream[@]}" | dc run --rm --no-deps -T --entrypoint sh openvpn \
-        -c 'find /etc/openvpn -mindepth 1 -delete && tar -xzf - -C /etc/openvpn'
+    run_oneoff --entrypoint sh openvpn \
+        -c 'find /etc/openvpn -mindepth 1 -delete && tar -xzf - -C /etc/openvpn' <"$plain"
     msg "✔ PKI restaurada. Arranca con: make up"
 }
 
+args=()
+split_compose_args args "$@"
+set -- "${args[@]}"
 require_docker
 case ${1:-} in
     backup) shift; backup "$@" ;;
