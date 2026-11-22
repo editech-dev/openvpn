@@ -44,7 +44,8 @@ services:
       net.ipv4.ip_forward: 1
     # Mínimo privilegio: solo las capacidades necesarias.
     cap_drop: [ALL]
-    cap_add: [NET_ADMIN, NET_RAW, SETUID, SETGID, SETPCAP, CHOWN, FOWNER]
+    # KILL: tini (root) debe poder reenviar SIGTERM a openvpn, que corre como nobody.
+    cap_add: [NET_ADMIN, NET_RAW, SETUID, SETGID, SETPCAP, CHOWN, FOWNER, KILL]
     security_opt:
       - no-new-privileges:true
     read_only: true

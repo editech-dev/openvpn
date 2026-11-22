@@ -27,7 +27,7 @@ tls-version-min 1.2
 data-ciphers ${OVPN_CIPHERS}
 auth SHA256
 
-keepalive 10 120
+keepalive 10 60
 user nobody
 group nobody
 persist-tun
