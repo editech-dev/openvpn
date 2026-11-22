@@ -143,6 +143,29 @@ wait_healthy
 try_client alice ok
 pass "backup → borrar volumen → restore conserva la CA y los perfiles existentes"
 
+echo "== apagado limpio (SIGTERM llega a openvpn y avisa a los clientes)"
+cp "$WORK/alice.ovpn" "$SMOKE_CLIENT_DIR/client.ovpn"
+cid=$(dc --profile test run -d --rm --no-deps client)
+for _ in $(seq 1 30); do
+    docker logs "$cid" 2>&1 | grep 'Initialization Sequence Completed' >/dev/null && break
+    sleep 1
+done
+t0=$(date +%s)
+OVPN_USERS=alice dc restart -t 10 openvpn
+elapsed=$(($(date +%s) - t0))
+if dc logs openvpn 2>&1 | grep 'Unexpected error when forwarding signal' >/dev/null; then
+    fail "tini no puede reenviar señales a openvpn"
+fi
+((elapsed < 9)) || fail "el reinicio tardó ${elapsed}s: openvpn no atiende SIGTERM (lo mata SIGKILL)"
+reconnected=0
+for _ in $(seq 1 20); do
+    if [[ $(docker logs "$cid" 2>&1 | grep -c 'Initialization Sequence Completed') -ge 2 ]]; then reconnected=1 && break; fi
+    sleep 1
+done
+docker rm -f "$cid" >/dev/null
+((reconnected)) || fail "el cliente no se reconectó en 20 s tras reiniciar el servidor"
+pass "reinicio limpio en ${elapsed}s y el cliente se reconecta solo"
+
 echo "== validación de configuración"
 if OVPN_USERS='mal usuario!' dc run --rm --no-deps -T openvpn ovpnctl users list >/dev/null 2>&1; then
     fail "aceptó un nombre de usuario inválido"
