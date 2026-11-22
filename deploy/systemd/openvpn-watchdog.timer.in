@@ -1,0 +1,9 @@
+[Unit]
+Description=Vigilancia periódica de OpenVPN/DuckDNS
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=@WATCH_INTERVAL@
+
+[Install]
+WantedBy=timers.target

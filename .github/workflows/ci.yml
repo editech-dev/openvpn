@@ -21,7 +21,7 @@ jobs:
       - name: shellcheck
         run: |
           docker run --rm -v "$PWD:/mnt:ro" -w /mnt koalaman/shellcheck:stable -x \
-            openvpn/entrypoint.sh openvpn/ovpnctl openvpn/healthcheck.sh openvpn/lib/*.sh scripts/*.sh tests/smoke.sh
+            openvpn/entrypoint.sh openvpn/ovpnctl openvpn/healthcheck.sh openvpn/duckdns.sh openvpn/lib/*.sh scripts/*.sh tests/*.sh
       - uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: openvpn/Dockerfile
@@ -51,6 +51,8 @@ jobs:
       - uses: actions/checkout@v7
       - name: Prueba end-to-end
         run: ./tests/smoke.sh
+      - name: Actualización automática, vuelta atrás y avisos
+        run: ./tests/autoupdate.sh
       - name: Trivy (vulnerabilidades de la imagen)
         uses: aquasecurity/trivy-action@v0.36.0
         with:

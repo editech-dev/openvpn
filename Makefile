@@ -3,10 +3,10 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 COMPOSE ?= docker compose
 
-.PHONY: help init up down restart apply ps logs users status config export export-zip backup build pull lint test test-unit test-smoke
+.PHONY: help init up down restart apply ps logs users status config export export-zip backup build pull install-host update update-status update-unfreeze notify-test lint test test-unit test-smoke test-autoupdate
 
 help: ## Muestra esta ayuda
-	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-12s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN{FS=":.*## "} /^[a-zA-Z_-]+:.*## /{printf "  \033[36m%-16s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
 
 init: ## Crea .env a partir de .env.example (no sobrescribe)
 	@test -f .env && echo ".env ya existe" || (cp .env.example .env && chmod 600 .env && echo "Creado .env: edítalo antes de 'make up'")
@@ -47,6 +47,21 @@ export-zip: ## Igual que export y además genera un .zip
 backup: ## Backup del volumen PKI en ./backups
 	./scripts/backup-pki.sh backup
 
+install-host: ## Instala timers de actualización, vigilante y avisos (pide sudo)
+	sudo ./scripts/install-host.sh
+
+update: ## Busca parches y actualiza ahora (con vuelta atrás si falla)
+	./scripts/auto-update.sh
+
+update-status: ## Estado de la actualización automática (congelada o no)
+	./scripts/auto-update.sh --status
+
+update-unfreeze: ## Reanuda las actualizaciones tras revisar un fallo
+	./scripts/auto-update.sh --unfreeze
+
+notify-test: ## Envía un aviso de prueba por Telegram
+	./scripts/notify.sh --test
+
 build: ## Construye la imagen localmente
 	$(COMPOSE) build openvpn
 
@@ -54,14 +69,17 @@ pull: ## Descarga las imágenes publicadas
 	$(COMPOSE) pull
 
 lint: ## shellcheck + hadolint + validación de compose
-	docker run --rm -v "$(CURDIR):/mnt:ro" -w /mnt koalaman/shellcheck:stable -x openvpn/entrypoint.sh openvpn/ovpnctl openvpn/healthcheck.sh openvpn/lib/*.sh scripts/*.sh tests/smoke.sh
+	docker run --rm -v "$(CURDIR):/mnt:ro" -w /mnt koalaman/shellcheck:stable -x openvpn/entrypoint.sh openvpn/ovpnctl openvpn/healthcheck.sh openvpn/duckdns.sh openvpn/lib/*.sh scripts/*.sh tests/*.sh
 	docker run --rm -i hadolint/hadolint < openvpn/Dockerfile
 	$(COMPOSE) --env-file .env.example config -q
 
-test: test-unit test-smoke ## Todas las pruebas
+test: test-unit test-smoke test-autoupdate ## Todas las pruebas
 
 test-unit: ## Pruebas unitarias (bats)
 	docker run --rm -v "$(CURDIR):/code:ro" -w /code bats/bats:latest -r tests/unit
 
 test-smoke: ## Prueba end-to-end con un cliente real
 	./tests/smoke.sh
+
+test-autoupdate: ## Prueba la actualización automática, la vuelta atrás y los avisos
+	./tests/autoupdate.sh

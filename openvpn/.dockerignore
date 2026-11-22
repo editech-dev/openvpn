@@ -2,5 +2,6 @@
 !Dockerfile
 !entrypoint.sh
 !healthcheck.sh
+!duckdns.sh
 !ovpnctl
 !lib/

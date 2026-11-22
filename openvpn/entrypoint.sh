@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Entrypoint del contenedor OpenVPN.
 #   server (por defecto): inicializa PKI, sincroniza usuarios, aplica NAT y arranca OpenVPN.
+#   duckdns: actualizador de DNS dinámico (no necesita TUN ni PKI).
 #   cualquier otro comando se ejecuta tal cual (ej. "ovpnctl users list", "sh").
 set -Eeuo pipefail
 
@@ -34,6 +35,7 @@ check_tun() {
 }
 
 main() {
+    [[ ${1:-} == duckdns ]] && exec /usr/local/bin/duckdns.sh
     load_config
     mkdir -p "$OVPN_RUN_DIR"
 

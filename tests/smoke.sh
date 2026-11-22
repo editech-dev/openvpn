@@ -4,8 +4,10 @@ set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$(mktemp -d)
-export SMOKE_CLIENT_DIR="$WORK/client"
-mkdir -p "$SMOKE_CLIENT_DIR"
+export SMOKE_CLIENT_DIR="$WORK/client" SMOKE_MOCK_DIR="$WORK/mock"
+mkdir -p "$SMOKE_CLIENT_DIR" "$SMOKE_MOCK_DIR"
+cp "$ROOT/tests/mock-http.sh" "$SMOKE_MOCK_DIR/"
+chmod 777 "$SMOKE_MOCK_DIR"
 
 dc() { docker compose -p ovpn-smoke --project-directory "$ROOT" --env-file "$ROOT/tests/smoke.env" \
     -f "$ROOT/compose.yaml" -f "$ROOT/tests/compose.smoke.yaml" "$@"; }
@@ -18,18 +20,18 @@ fail() {
 }
 
 cleanup() {
-    dc --profile test down -v --remove-orphans >/dev/null 2>&1 || true
+    dc --profile test --profile duckdns down -v --remove-orphans >/dev/null 2>&1 || true
     rm -rf "$WORK"
 }
 trap cleanup EXIT
 
 wait_healthy() {
-
+    local svc=${1:-openvpn}
     for _ in $(seq 1 60); do
-        [[ $(docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q openvpn)" 2>/dev/null) == healthy ]] && return 0
+        [[ $(docker inspect -f '{{.State.Health.Status}}' "$(dc ps -q "$svc")" 2>/dev/null) == healthy ]] && return 0
         sleep 2
     done
-    fail "openvpn no llegó a estado healthy"
+    fail "$svc no llegó a estado healthy"
 }
 
 # Arranca un cliente con el perfil dado y espera el resultado (ok|fail).
@@ -205,5 +207,24 @@ out=$(OVPN_USERS='mal usuario!' SMOKE_SERVER_IP=172.30.99.30 dc run --rm --no-de
     fail "aceptó un nombre de usuario inválido"
 grep 'Usuario inválido' <<<"$out" >/dev/null || fail "falló por otro motivo: $out"
 pass "rechaza usuarios inválidos"
+
+echo "== duckdns (servidor simulado)"
+dc --profile test up -d mock
+OVPN_USERS=alice dc --profile duckdns up -d duckdns
+wait_healthy duckdns
+logs=$(dc logs --no-color duckdns 2>&1)
+grep 'IP actualizada a 203.0.113.7' <<<"$logs" >/dev/null || fail "duckdns no registró la actualización: $logs"
+grep 'domains=prueba&token=test-token-ok-123' "$SMOKE_MOCK_DIR/requests.log" >/dev/null || fail "duckdns no llamó al servicio"
+if grep 'test-token-ok-123' <<<"$logs" >/dev/null; then fail "el token aparece en los logs"; fi
+if docker top "$(dc ps -q duckdns)" -o args 2>/dev/null | grep 'test-token' >/dev/null; then fail "el token aparece en la lista de procesos"; fi
+[[ $(docker inspect -f '{{.Config.User}}' "$(dc ps -q duckdns)") == 65534:65534 ]] || fail "duckdns no corre como nobody"
+pass "duckdns actualiza la IP, queda healthy y no expone el token"
+OVPN_USERS=alice DUCKDNS_TOKEN=bad-token-12345 dc --profile duckdns up -d duckdns
+for _ in $(seq 1 20); do
+    dc logs --no-color duckdns 2>&1 | grep 'respondió KO' >/dev/null && break
+    sleep 1
+done
+dc logs --no-color duckdns 2>&1 | grep 'respondió KO' >/dev/null || fail "duckdns no informa un token rechazado"
+pass "duckdns informa claramente un token o subdominio rechazado (KO)"
 
 printf '\n\033[32mTodas las pruebas pasaron\033[0m\n'

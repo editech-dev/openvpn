@@ -1,0 +1,11 @@
+[Unit]
+Description=Vigilante de OpenVPN/DuckDNS (avisos por Telegram)
+After=docker.service
+OnFailure=openvpn-notify-failure@%n.service
+
+[Service]
+Type=oneshot
+User=@USER@
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/scripts/watchdog.sh
+TimeoutStartSec=5min

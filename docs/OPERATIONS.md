@@ -34,6 +34,10 @@ stateDiagram-v2
 
 ## Actualizar
 
+**Parches de seguridad (automático):** con `sudo ./scripts/install-host.sh` el servidor reconstruye la imagen a diario con los parches de Alpine. Si hay paquetes nuevos, la despliega y la verifica; si falla, vuelve a la versión anterior, congela las actualizaciones y avisa por Telegram. Consulta [AUTO-UPDATE.md](AUTO-UPDATE.md). A mano: `make update`, `make update-status` y `make update-unfreeze`.
+
+**Cambios del código del repositorio** (nuevas versiones de este proyecto):
+
 ```bash
 git pull
 make build      # si usas la imagen local (OVPN_IMAGE_TAG=latest)

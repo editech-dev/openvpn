@@ -63,7 +63,7 @@ cd openvpn
 cp .env.example .env && chmod 600 .env
 nano .env        # DUCKDNS_SUBDOMAINS, DUCKDNS_TOKEN, OVPN_USERS
 docker compose up -d
-docker compose logs -f     # espera "Initialization Sequence Completed" y "DuckDNS request ... successful"
+docker compose logs -f     # espera "Initialization Sequence Completed" y "DuckDNS: IP actualizada a ..."
 ```
 
 La primera vez construye la imagen (unos 20 s) si no hay una versión publicada.
@@ -123,5 +123,17 @@ Mientras el servidor está caído, el cliente retira las rutas de la VPN para po
 ## Endurecimiento recomendado de la VM
 
 - Deja abiertos en el firewall de la nube solo SSH (idealmente limitado a tu IP o vía IAP) y el puerto VPN.
-- Actualizaciones automáticas: `sudo apt install unattended-upgrades`.
 - Usa llaves SSH, no contraseñas.
+
+## 7. Actualización automática y avisos
+
+```bash
+nano .env                    # NOTIFY_TELEGRAM_TOKEN, NOTIFY_TELEGRAM_CHAT_ID y AUTOUPDATE_ONCALENDAR
+./scripts/notify.sh --test   # debe llegarte el mensaje
+sudo ./scripts/install-host.sh
+systemctl list-timers 'openvpn-*'
+```
+
+Desde ese momento la VM reconstruye la imagen con los parches de Alpine cada día, con verificación y vuelta atrás. También actualiza el SO, Docker incluido, y reinicia cuando un parche lo requiere. Te avisa por Telegram de fallos, servicios caídos y reinicios. Guía completa en [AUTO-UPDATE.md](AUTO-UPDATE.md).
+
+> En una e2-micro (1 GB de RAM) la reconstrucción tarda menos de un minuto y no afecta al servicio. Los contenedores solo se reinician si hay paquetes nuevos (unos 10–15 s de reconexión para los clientes).

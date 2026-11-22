@@ -12,6 +12,7 @@ Servidor **OpenVPN** portable con **DNS dinámico (DuckDNS)**, configurable 100 
 - 🌐 DuckDNS mantiene tu dominio apuntando a tu IP pública aunque cambie.
 - 🛡️ Contenedor endurecido: sistema de archivos de solo lectura, capacidades mínimas, OpenVPN corriendo como `nobody`.
 - 🔁 Reconexión automática: los clientes vuelven solos tras reinicios, caídas o un cambio de IP del servidor.
+- ♻️ **Se actualiza solo y sin depender de GitHub**: reconstruye la imagen con los parches de Alpine, la verifica y, si falla, vuelve a la versión anterior, se congela y **te avisa por Telegram**.
 - ✅ Probado en CI con un cliente OpenVPN real (conexión, revocación, persistencia, backup/restore y cambio de IP), y en producción en una VM en la nube.
 
 ---
@@ -28,8 +29,9 @@ Servidor **OpenVPN** portable con **DNS dinámico (DuckDNS)**, configurable 100 
 8. [Backup, restauración y migración](#backup-restauración-y-migración)
 9. [Estructura del repositorio](#estructura-del-repositorio)
 10. [Seguridad](#seguridad)
-11. [Desarrollo y pruebas](#desarrollo-y-pruebas)
-12. [Documentación adicional](#documentación-adicional)
+11. [Actualización automática y avisos](#actualización-automática-y-avisos)
+12. [Desarrollo y pruebas](#desarrollo-y-pruebas)
+13. [Documentación adicional](#documentación-adicional)
 
 ---
 
@@ -57,12 +59,14 @@ flowchart LR
     OV -- "3. NAT: salida a Internet / LAN" --> Internet
 ```
 
-Hay **dos servicios**:
+Hay **dos servicios**, ambos con **la misma imagen** (este repo: Alpine + OpenVPN 2.7 + easy-rsa 3), construida en tu propio servidor:
 
-| Servicio | Imagen | Función |
+| Servicio | Modo | Función |
 |---|---|---|
-| `duckdns` | `lscr.io/linuxserver/duckdns` (versión fijada) | Actualiza periódicamente tu subdominio de DuckDNS con la IP pública del host. Opcional (perfil de Compose). |
-| `openvpn` | `ghcr.io/editech-dev/openvpn` (este repo, Alpine + OpenVPN 2.7 + easy-rsa 3) | Servidor VPN. Genera la PKI, sincroniza usuarios, aplica NAT y sirve el túnel. |
+| `openvpn` | `server` | Servidor VPN. Genera la PKI, sincroniza usuarios, aplica NAT y sirve el túnel. |
+| `duckdns` | `duckdns` | Publica la IP pública del host en tu subdominio de DuckDNS cada `DUCKDNS_INTERVAL` segundos (5 min por defecto). Corre como `nobody`, sin capacidades y con el token oculto de la lista de procesos. Opcional (perfil de Compose). |
+
+No hay imágenes de terceros: todo sale de los paquetes oficiales de Alpine, así que un solo proceso de actualización mantiene ambos servicios al día.
 
 ### Qué pasa en cada arranque del contenedor `openvpn`
 
@@ -196,8 +200,8 @@ Todas se definen en `.env` (plantilla documentada en [`.env.example`](.env.examp
 | `TZ` | `UTC` | Zona horaria (ej. `Europe/Madrid`). |
 | `DUCKDNS_SUBDOMAINS` | — | Subdominio(s) sin `.duckdns.org`, separados por coma. |
 | `DUCKDNS_TOKEN` | — | Token de DuckDNS (**secreto**). Ver alternativa con Docker secrets en `compose.override.example.yaml`. |
-| `DUCKDNS_UPDATE_IP` | `ipv4` | `ipv4`, `ipv6` o `both`. |
-| `PUID` / `PGID` | `1000` | Usuario/grupo del contenedor DuckDNS. |
+| `DUCKDNS_TOKEN_FILE` | — | Alternativa a `DUCKDNS_TOKEN`: ruta a un archivo con el token (Docker secrets). |
+| `DUCKDNS_INTERVAL` | `300` | Segundos entre actualizaciones (mín. 10). Se publica la IPv4 desde la que sale la petición. |
 
 ### OpenVPN
 
@@ -224,7 +228,7 @@ Todas se definen en `.env` (plantilla documentada en [`.env.example`](.env.examp
 | `OVPN_IMAGE_TAG` | `latest` | Versión de la imagen publicada (ej. `1.0.0`). |
 | `OVPN_PULL_POLICY` | `missing` | Política de descarga de la imagen (`missing`, `always`, `never`, `build`). |
 
-Detalle y ejemplos (split tunnel, TCP 443, acceso a LAN): [docs/CONFIG.md](docs/CONFIG.md).
+Detalle y ejemplos (split tunnel, TCP 443, acceso a LAN): [docs/CONFIG.md](docs/CONFIG.md). Variables de la actualización automática y los avisos (`AUTOUPDATE_*`, `NOTIFY_*`): [docs/AUTO-UPDATE.md](docs/AUTO-UPDATE.md#5-variables).
 
 > Cambiar `OVPN_HOSTNAME`, `OVPN_PORT` u `OVPN_PROTO` obliga a **volver a exportar** los perfiles. Cambiar `OVPN_CA_*` o `OVPN_SERVER_CERT_DAYS` no tiene efecto sobre una PKI ya creada.
 
@@ -243,6 +247,10 @@ Detalle y ejemplos (split tunnel, TCP 443, acceso a LAN): [docs/CONFIG.md](docs/
 | `make export-zip` | `scripts/export-clients.sh --zip` | Exportar y comprimir |
 | `make backup` | `scripts/backup-pki.sh backup` | Backup de la PKI |
 | `make logs` / `make ps` | — | Logs / estado de contenedores |
+| `make install-host` | `sudo scripts/install-host.sh` | Instala actualización automática, vigilante y avisos |
+| `make update` / `make update-status` | `scripts/auto-update.sh [--status]` | Actualizar ahora / ver si está congelado |
+| `make update-unfreeze` | `scripts/auto-update.sh --unfreeze` | Reanudar tras revisar un fallo |
+| `make notify-test` | `scripts/notify.sh --test` | Aviso de prueba por Telegram |
 | `make config` | `scripts/ovpn.sh config` | Ver `server.conf` generado |
 | `make lint` / `make test` | — | Calidad y pruebas |
 
@@ -279,21 +287,30 @@ Más detalles: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 │   ├── Dockerfile
 │   ├── entrypoint.sh             # Orquesta el arranque
 │   ├── ovpnctl                   # CLI de administración (dentro del contenedor)
-│   ├── healthcheck.sh
+│   ├── healthcheck.sh            # Salud de openvpn y de duckdns
+│   ├── duckdns.sh                # Actualizador de DNS dinámico
 │   └── lib/
 │       ├── common.sh             # Logging, validación, carga de configuración
 │       ├── pki.sh                # easy-rsa: CA, servidor, clientes, CRL
 │       ├── users.sh              # Sincronización OVPN_USERS ⇄ PKI
-│       └── render.sh             # server.conf y perfiles .ovpn
+│       ├── render.sh             # server.conf y perfiles .ovpn
+│       └── duckdns.sh            # Respuestas y validación de DuckDNS
 ├── scripts/                      # Herramientas para el host
 │   ├── export-clients.sh
 │   ├── ovpn.sh
-│   └── backup-pki.sh
+│   ├── backup-pki.sh
+│   ├── auto-update.sh            # Actualización con verificación y vuelta atrás
+│   ├── watchdog.sh               # Vigilante: avisa de servicios caídos o recuperados
+│   ├── notify.sh                 # Avisos por Telegram
+│   └── install-host.sh           # Instala timers de systemd y unattended-upgrades
 ├── tests/
 │   ├── unit/*.bats               # Pruebas unitarias
-│   └── smoke.sh                  # Prueba end-to-end con cliente real
+│   ├── smoke.sh                  # Prueba end-to-end con cliente real y DuckDNS simulado
+│   ├── autoupdate.sh             # Actualización, vuelta atrás, congelado, vigilante y avisos
+│   └── mock-http.sh              # DuckDNS y Telegram simulados
+├── deploy/                       # Plantillas de systemd y apt para el host
 ├── docs/                         # Guías detalladas
-└── .github/                      # CI, release, Dependabot, plantillas
+└── .github/                      # CI, release, plantillas
 ```
 
 ---
@@ -304,10 +321,22 @@ Más detalles: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 - TLS ≥ 1.2, cifrados AEAD (AES-GCM / ChaCha20-Poly1305), llaves EC P-256, sin compresión.
 - Revocación mediante CRL, consultada en cada conexión; `revoke` además corta las sesiones activas.
 - Contenedor con `read_only`, `no-new-privileges`, `cap_drop: ALL` y solo las capacidades necesarias; OpenVPN corre como `nobody`.
-- Imágenes base fijadas por digest y actualizadas por Dependabot; escaneo con Trivy en CI; imágenes publicadas con SBOM, procedencia y firma cosign.
+- Imagen base fijada por digest y **parcheada automáticamente en el propio servidor** (`apk upgrade` con verificación y vuelta atrás); escaneo con Trivy en CI; imágenes publicadas con SBOM, procedencia y firma cosign.
 - Secretos fuera de git: `.env`, `exports/`, `backups/` y `secrets/` están en `.gitignore`; gitleaks revisa cada cambio.
 
 Política de reporte de vulnerabilidades y recomendaciones de endurecimiento: [SECURITY.md](SECURITY.md).
+
+---
+
+## Actualización automática y avisos
+
+Con `sudo ./scripts/install-host.sh` el servidor queda en piloto automático:
+
+- **Cada día** reconstruye la imagen con los últimos parches de Alpine. Si no hay paquetes nuevos **no reinicia nada**. Si los hay, despliega, comprueba que `openvpn` y `duckdns` quedan sanos y, si no, **vuelve sola a la versión anterior, congela las actualizaciones y te avisa por Telegram** con el motivo y los logs.
+- **El sistema operativo** se actualiza con `unattended-upgrades`, ampliado para incluir Docker y para reiniciar de madrugada solo cuando un parche lo requiere.
+- **Un vigilante** revisa los servicios cada 10 minutos y avisa cuando uno cae y cuando se recupera, además de cada arranque del servidor.
+
+No depende de GitHub: solo necesita acceso a los repositorios de Alpine y Debian. Guía completa, incluida la creación del bot de Telegram: [docs/AUTO-UPDATE.md](docs/AUTO-UPDATE.md).
 
 ---
 
@@ -316,7 +345,8 @@ Política de reporte de vulnerabilidades y recomendaciones de endurecimiento: [S
 ```bash
 make lint        # shellcheck, hadolint, validación de compose
 make test-unit   # pruebas bats
-make test-smoke  # levanta servidor + cliente real: conexión, revocación, persistencia
+make test-smoke  # levanta servidor + cliente real: conexión, revocación, persistencia, DuckDNS
+make test-autoupdate  # actualización, vuelta atrás, congelado, vigilante y avisos (Telegram simulado)
 ```
 
 Opcional: `pipx install pre-commit && pre-commit install` para ejecutar los controles (incluido gitleaks) antes de cada commit.
@@ -330,6 +360,7 @@ Convenciones: [Conventional Commits](https://www.conventionalcommits.org/es/), [
 - [docs/INSTALL.md](docs/INSTALL.md): instalación paso a paso (DuckDNS, router, firewall, verificación).
 - [docs/DEPLOY-CLOUD.md](docs/DEPLOY-CLOUD.md): despliegue probado en una VM en la nube (Google Cloud) y comportamiento ante caídas.
 - [docs/CONFIG.md](docs/CONFIG.md): configuraciones típicas.
+- [docs/AUTO-UPDATE.md](docs/AUTO-UPDATE.md): actualización automática con vuelta atrás, vigilante y avisos por Telegram.
 - [docs/OPERATIONS.md](docs/OPERATIONS.md): operación diaria, actualizaciones, backups y migración.
 - [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md): problemas frecuentes.
 - [SECURITY.md](SECURITY.md): seguridad.

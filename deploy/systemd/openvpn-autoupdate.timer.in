@@ -1,0 +1,11 @@
+[Unit]
+Description=Revisión periódica de parches para OpenVPN/DuckDNS
+
+[Timer]
+OnCalendar=@ONCALENDAR@
+RandomizedDelaySec=15min
+# Si el servidor estaba apagado a la hora programada, se ejecuta al arrancar.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

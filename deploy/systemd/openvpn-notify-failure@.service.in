@@ -1,0 +1,8 @@
+[Unit]
+Description=Aviso de fallo inesperado de %i
+
+[Service]
+Type=oneshot
+User=@USER@
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/scripts/notify.sh "❌ La tarea %i terminó con un error inesperado. Revisa: journalctl -u %i"

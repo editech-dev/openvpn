@@ -8,12 +8,20 @@ LABEL org.opencontainers.image.title="openvpn" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${VERSION}"
 
-# Versiones fijadas por la imagen base (digest); Dependabot la actualiza.
-# hadolint ignore=DL3018
-RUN apk add --no-cache bash openvpn easy-rsa iptables iproute2 openssl socat tini \
-    && rm -rf /etc/openvpn/*
+# La base está fijada por digest (reproducible); los parches de seguridad de Alpine se
+# aplican en cada construcción con "apk upgrade". scripts/auto-update.sh cambia
+# PATCH_STAMP para invalidar la caché y compara packages.txt para saber si hubo cambios.
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+ARG PATCH_STAMP=none
+# hadolint ignore=DL3017,DL3018
+RUN echo "patch-stamp: ${PATCH_STAMP}" \
+    && apk upgrade --no-cache \
+    && apk add --no-cache bash curl openvpn easy-rsa iptables iproute2 openssl socat tini \
+    && rm -rf /etc/openvpn/* \
+    && mkdir -p /usr/local/share/ovpn \
+    && apk info -v | sort >/usr/local/share/ovpn/packages.txt
 
-COPY --chmod=0755 entrypoint.sh healthcheck.sh ovpnctl /usr/local/bin/
+COPY --chmod=0755 entrypoint.sh healthcheck.sh duckdns.sh ovpnctl /usr/local/bin/
 COPY --chmod=0755 lib/ /usr/local/lib/ovpn/
 
 ENV OVPN_DATA_DIR=/etc/openvpn \
@@ -21,7 +29,7 @@ ENV OVPN_DATA_DIR=/etc/openvpn \
 
 EXPOSE 1194/udp 1194/tcp
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --start-interval=3s --retries=3 \
     CMD ["/usr/local/bin/healthcheck.sh"]
 
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]

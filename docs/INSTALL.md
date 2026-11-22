@@ -66,7 +66,7 @@ make up
 make logs
 ```
 
-Debes ver, en `duckdns`, una línea indicando que la actualización fue correcta y, en `openvpn`:
+Debes ver, en `duckdns`, `DuckDNS: IP actualizada a <tu IP>` (o `IP vigente … sin cambios`) y, en `openvpn`:
 
 ```
 [INFO ] Usuarios activos: ana-laptop,ana-movil

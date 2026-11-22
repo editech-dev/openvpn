@@ -5,6 +5,15 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 ## [Sin publicar]
 
 ### Añadido
+- **Actualización automática sin GitHub** (`scripts/auto-update.sh`): reconstruye la imagen en el host con los parches de Alpine y solo la despliega si hay paquetes nuevos. Verifica que los servicios quedan sanos y, si no, vuelve a la versión anterior, congela las actualizaciones y avisa.
+- **Avisos por Telegram** (`scripts/notify.sh`) y **vigilante** (`scripts/watchdog.sh`): fallos de actualización, servicios caídos o recuperados, arranques del servidor y latido opcional a healthchecks.io.
+- `scripts/install-host.sh`: timers de systemd y `unattended-upgrades` ampliado (Docker y reinicio automático cuando hace falta).
+- Prueba automática de la actualización, la vuelta atrás, el congelado, el vigilante y los avisos (`tests/autoupdate.sh`), incluida en CI.
+
+### Cambiado
+- **DuckDNS ahora usa la misma imagen del proyecto** (modo `duckdns`) en lugar de `linuxserver/duckdns`: sin imágenes de terceros, corre como `nobody` sin capacidades y con el token oculto de la lista de procesos. Variables nuevas: `DUCKDNS_INTERVAL` y `DUCKDNS_TOKEN_FILE`. Se retiran `DUCKDNS_UPDATE_IP` (solo IPv4), `PUID` y `PGID`.
+- La imagen aplica `apk upgrade` al construirse y guarda su lista de paquetes.
+- Se retira Dependabot: los parches se aplican en el propio servidor y el repositorio mantiene una sola rama.
 - Imagen OpenVPN propia (Alpine 3.24, OpenVPN 2.7, easy-rsa 3.2) con PKI automática EC P-256 y `tls-crypt`.
 - Lista de usuarios permitidos (`OVPN_USERS`) con alta y revocación automáticas.
 - CLI `ovpnctl`: `users list|active|sync|revoke|reissue`, `export`, `status`, `config`.

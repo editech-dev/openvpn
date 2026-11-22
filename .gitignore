@@ -23,3 +23,6 @@ backups/
 
 # Notas privadas de despliegue (IPs, proyecto, usuarios reales)
 *.local.md
+
+# Estado local del actualizador automático
+.state/

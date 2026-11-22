@@ -42,9 +42,24 @@ El usuario está revocado. Si debe tener acceso: añádelo a `OVPN_USERS` y ejec
 
 ## DuckDNS no actualiza
 
-- `docker compose logs duckdns`: un `KO` indica token o subdominio incorrectos.
-- `DUCKDNS_SUBDOMAINS` va **sin** `.duckdns.org`.
+- `docker compose logs duckdns`:
+  - `respondió KO`: token o subdominio incorrectos.
+  - `sin respuesta del servicio`: no hay salida a Internet o DuckDNS está caído; reintenta solo (30 s, 60 s, 120 s… hasta el intervalo).
+  - `DUCKDNS_TOKEN con formato inválido`: el token solo admite letras, números y `-`; revisa que no tenga comillas ni espacios.
+- `DUCKDNS_SUBDOMAINS` va **sin** `.duckdns.org` y en minúsculas.
 - Comprueba que `COMPOSE_PROFILES` contiene `duckdns`.
+- `docker compose ps duckdns` muestra `unhealthy` si no hay una actualización correcta en los últimos 3 intervalos (el vigilante lo avisa por Telegram).
+- Con el token en un secret (`DUCKDNS_TOKEN_FILE`), el archivo debe ser legible por el contenedor (`chmod 644`, dentro de `secrets/` con `chmod 700`).
+
+## La actualización automática está congelada
+
+Llegó un aviso 🚨 y `make update-status` muestra `CONGELADO`: la última versión no quedó sana y se restauró la anterior, así que la VPN sigue funcionando. Revisa `journalctl -u openvpn-autoupdate -n 100` y, cuando quieras reintentar, ejecuta `make update-unfreeze && ./scripts/auto-update.sh --force`. Pasos detallados en [AUTO-UPDATE.md](AUTO-UPDATE.md#tras-un-aviso-de-fallo-).
+
+## No llegan los avisos de Telegram
+
+- `make notify-test`: si responde `Telegram sin configurar`, faltan `NOTIFY_TELEGRAM_TOKEN` o `NOTIFY_TELEGRAM_CHAT_ID` en `.env`.
+- `No se pudo enviar`: token o chat_id incorrectos, o no le has escrito nunca al bot (escríbele `/start`).
+- Los avisos de los timers quedan en el journal: `journalctl -u openvpn-watchdog -u openvpn-autoupdate -n 50`.
 
 ## Exportar falla con "no tiene un certificado activo"
 

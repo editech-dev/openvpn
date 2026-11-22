@@ -65,24 +65,42 @@ services:
     logging: *logging
 
   duckdns:
-    image: lscr.io/linuxserver/duckdns:ddf6a18c-ls98@sha256:8be3d2d20da2b4a3ec4d86eb456460ef79d791d6c7ceea865a9d01aa53ce1456
-    # Se activa con COMPOSE_PROFILES=duckdns (ver .env.example). Si usas otro DNS
-    # dinámico o IP fija, quita el perfil y define OVPN_HOSTNAME.
+    # Misma imagen que openvpn, en modo "duckdns": actualiza la IP pública cada
+    # DUCKDNS_INTERVAL segundos. Se activa con COMPOSE_PROFILES=duckdns (ver .env.example).
+    # Si usas otro DNS dinámico o IP fija, quita el perfil y define OVPN_HOSTNAME.
+    image: ghcr.io/editech-dev/openvpn:${OVPN_IMAGE_TAG:-latest}
+    build:
+      context: ./openvpn
+    pull_policy: ${OVPN_PULL_POLICY:-missing}
     profiles: [duckdns]
+    command: ["duckdns"]
     restart: unless-stopped
+    user: "65534:65534"
     environment:
       TZ: ${TZ:-UTC}
-      PUID: ${PUID:-1000}
-      PGID: ${PGID:-1000}
-      SUBDOMAINS: ${DUCKDNS_SUBDOMAINS:-}
-      TOKEN: ${DUCKDNS_TOKEN:-}
-      UPDATE_IP: ${DUCKDNS_UPDATE_IP:-ipv4}
-      LOG_FILE: "false"
+      DUCKDNS_SUBDOMAINS: ${DUCKDNS_SUBDOMAINS:-}
+      DUCKDNS_TOKEN: ${DUCKDNS_TOKEN:-}
+      DUCKDNS_TOKEN_FILE: ${DUCKDNS_TOKEN_FILE:-}
+      DUCKDNS_INTERVAL: ${DUCKDNS_INTERVAL:-300}
+      DUCKDNS_URL: ${DUCKDNS_URL:-}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh", "duckdns"]
+      interval: 60s
+      timeout: 5s
+      start_period: 60s
+      start_interval: 3s
+      retries: 2
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
     deploy:
       resources:
         limits:
-          cpus: "0.25"
-          memory: 64M
+          cpus: "0.10"
+          memory: 32M
     logging: *logging
 
 volumes:

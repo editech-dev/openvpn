@@ -8,6 +8,21 @@ services:
       vpnnet:
         ipv4_address: ${SMOKE_SERVER_IP:-172.30.99.10}
 
+  duckdns:
+    networks: [vpnnet]
+
+  # Servidor HTTP simulado (DuckDNS y Telegram) para no depender de servicios reales.
+  mock:
+    image: ${SMOKE_MOCK_IMAGE:-ghcr.io/editech-dev/openvpn:smoke}
+    pull_policy: never
+    profiles: [test]
+    entrypoint: ["socat", "TCP-LISTEN:80,fork,reuseaddr", "SYSTEM:/mock/mock-http.sh"]
+    volumes:
+      - ${SMOKE_MOCK_DIR:?}:/mock
+    ports:
+      - "127.0.0.1:${SMOKE_MOCK_PORT:-18080}:80"
+    networks: [vpnnet]
+
   client:
     image: ghcr.io/editech-dev/openvpn:smoke
     pull_policy: never

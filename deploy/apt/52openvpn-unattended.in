@@ -1,0 +1,12 @@
+// Generado por scripts/install-host.sh (proyecto openvpn). Se borra con --uninstall.
+// Amplía la configuración de unattended-upgrades de Debian:
+//  - incluye los paquetes de Docker (docker-ce, containerd, compose...)
+//  - reinicia el servidor solo si una actualización lo requiere (kernel, libc...)
+Unattended-Upgrade::Origins-Pattern {
+        "origin=Docker,label=Docker CE";
+};
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "true";
+Unattended-Upgrade::Automatic-Reboot-Time "@REBOOT_TIME@";

@@ -12,7 +12,7 @@ No abras un issue público. Usa **[Report a vulnerability](https://github.com/ed
 | Robo de un perfil `.ovpn` | Un certificado por usuario y dispositivo; `users revoke` lo invalida y corta la sesión. |
 | Ataques criptográficos | TLS ≥ 1.2, AEAD, EC P-256, sin compresión (evita VORACLE). |
 | Compromiso del proceso OpenVPN | Corre como `nobody`; contenedor `read_only`, `no-new-privileges`, capacidades mínimas. |
-| Imágenes con CVE | Base fijada por digest + Dependabot + Trivy en CI. |
+| Imágenes con CVE | Parches de Alpine aplicados a diario en el propio servidor (`scripts/auto-update.sh`, con verificación y vuelta atrás) + Trivy en CI. Sin imágenes de terceros. |
 | Secretos en git | `.gitignore` + gitleaks (CI y pre-commit). |
 
 ## Limitaciones conocidas
@@ -24,7 +24,7 @@ No abras un issue público. Usa **[Report a vulnerability](https://github.com/ed
 
 ## Recomendaciones para producción
 
-- Mantén el host actualizado y con firewall (solo el puerto VPN y SSH expuestos).
+- Mantén el host actualizado y con firewall (solo el puerto VPN y SSH expuestos): `sudo ./scripts/install-host.sh` automatiza las actualizaciones de la imagen y del SO, y avisa por Telegram si algo falla ([docs/AUTO-UPDATE.md](docs/AUTO-UPDATE.md)).
 - Un usuario por dispositivo; revisa `make users` periódicamente y da de baja lo que no se use.
 - Backups cifrados (`--age-recipient`) y fuera del servidor.
 - Fija `OVPN_IMAGE_TAG` a una versión concreta y actualiza conscientemente.
