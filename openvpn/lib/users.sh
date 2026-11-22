@@ -15,7 +15,7 @@ mgmt_cmd() {
 
 # Desconecta sesiones activas de un usuario (si el servidor está corriendo).
 kick_user() {
-    mgmt_cmd "kill $1" | grep -q SUCCESS && info "Sesión activa de '$1' desconectada" || true
+    mgmt_cmd "kill $1" | grep SUCCESS >/dev/null && info "Sesión activa de '$1' desconectada" || true
 }
 
 users_desired() { split_list "$OVPN_USERS"; }
@@ -37,7 +37,7 @@ users_sync() {
             fi
             continue
         fi
-        if pki_revoked_users | grep -qxF -- "$user"; then
+        if pki_revoked_users | grep -xF -- "$user" >/dev/null; then
             warn "'$user' fue revocado previamente; no se reemite automáticamente. Usa: ovpnctl users reissue $user"
             continue
         fi
@@ -48,7 +48,7 @@ users_sync() {
     if is_true "$OVPN_REVOKE_REMOVED"; then
         while read -r user; do
             [[ -z $user ]] && continue
-            if ! printf '%s\n' "${desired[@]}" | grep -qxF -- "$user"; then
+            if ! printf '%s\n' "${desired[@]}" | grep -xF -- "$user" >/dev/null; then
                 pki_revoke_client "$user"
                 kick_user "$user"
                 changed=1
@@ -67,7 +67,7 @@ users_revoke() {
     pki_revoke_client "$user"
     pki_gen_crl
     kick_user "$user"
-    if users_desired | grep -qxF -- "$user"; then
+    if users_desired | grep -xF -- "$user" >/dev/null; then
         warn "'$user' sigue en OVPN_USERS: quítalo del .env para que la configuración sea coherente"
     fi
 }
@@ -76,7 +76,7 @@ users_reissue() {
     pki_env
     local user=$1
     valid_username "$user" || die "Nombre de usuario inválido: $user"
-    users_desired | grep -qxF -- "$user" || die "'$user' no está en OVPN_USERS; agrégalo primero al .env"
+    users_desired | grep -xF -- "$user" >/dev/null || die "'$user' no está en OVPN_USERS; agrégalo primero al .env"
     if pki_user_active "$user"; then
         pki_revoke_client "$user"
         kick_user "$user"
@@ -100,13 +100,13 @@ users_list() {
         if pki_user_active "$user"; then
             expires=$(cert_expiry "$EASYRSA_PKI/issued/$user.crt")
             if cert_expired "$EASYRSA_PKI/issued/$user.crt"; then status=vencido; else status=activo; fi
-        elif pki_revoked_users | grep -qxF -- "$user"; then
+        elif pki_revoked_users | grep -xF -- "$user" >/dev/null; then
             status=revocado
         else
             status=pendiente
         fi
         local inlist=no
-        users_desired | grep -qxF -- "$user" && inlist=si
+        users_desired | grep -xF -- "$user" >/dev/null && inlist=si
         printf '%-24s %-10s %-10s %s\n' "$user" "$status" "$inlist" "$expires"
     done
 }

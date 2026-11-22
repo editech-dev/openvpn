@@ -43,7 +43,6 @@ EOF
 
     if is_true "$OVPN_REDIRECT_GATEWAY"; then
         echo 'push "redirect-gateway def1 bypass-dhcp"'
-        echo 'push "block-outside-dns"'
     fi
     for d in $(split_list "$OVPN_DNS"); do
         echo "push \"dhcp-option DNS ${d}\""
@@ -76,6 +75,8 @@ persist-key
 persist-tun
 remote-cert-tls server
 verify-x509-name server name
+# Evita fugas de DNS en Windows; el resto de clientes ignora la opción sin error.
+setenv opt block-outside-dns
 tls-version-min 1.2
 data-ciphers ${OVPN_CIPHERS}
 auth SHA256

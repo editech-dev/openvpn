@@ -81,7 +81,7 @@ pki_revoked_users() { _index_users R; }
 
 # Un usuario está activo si tiene certificado emitido vigente en issued/.
 pki_user_active() {
-    [[ -f $EASYRSA_PKI/issued/$1.crt ]] && pki_valid_users | grep -qxF -- "$1"
+    [[ -f $EASYRSA_PKI/issued/$1.crt ]] && pki_valid_users | grep -xF -- "$1" >/dev/null
 }
 
 cert_expiry() { openssl x509 -in "$1" -noout -enddate | cut -d= -f2; }
