@@ -136,11 +136,11 @@ echo "== backup y restauración"
 CA=(sh -c 'openssl x509 -in /etc/openvpn/pki/ca.crt -noout -fingerprint')
 ca_before=$(dc exec -T openvpn "${CA[@]}")
 SC=(-- -p ovpn-smoke --env-file "$ROOT/tests/smoke.env" -f "$ROOT/compose.yaml" -f "$ROOT/tests/compose.smoke.yaml")
-OVPN_USERS=alice "$ROOT/scripts/backup-pki.sh" backup --out "$WORK/bk" "${SC[@]}" >/dev/null 2>&1
+OVPN_USERS=alice SMOKE_SERVER_IP=172.30.99.30 "$ROOT/scripts/backup-pki.sh" backup --out "$WORK/bk" "${SC[@]}" >/dev/null 2>&1
 backup=$(ls "$WORK"/bk/*.tar.gz)
 tar -tzf "$backup" | grep 'pki/ca.crt$' >/dev/null || fail "el backup no contiene la CA"
 OVPN_USERS=alice dc down -v
-OVPN_USERS=alice "$ROOT/scripts/backup-pki.sh" restore "$backup" --yes "${SC[@]}" >/dev/null 2>&1
+OVPN_USERS=alice SMOKE_SERVER_IP=172.30.99.30 "$ROOT/scripts/backup-pki.sh" restore "$backup" --yes "${SC[@]}" >/dev/null 2>&1
 OVPN_USERS=alice dc up -d openvpn
 wait_healthy
 [[ $(dc exec -T openvpn "${CA[@]}") == "$ca_before" ]] || fail "la CA restaurada no coincide"
@@ -170,10 +170,34 @@ docker rm -f "$cid" >/dev/null
 ((reconnected)) || fail "el cliente no se reconectó en 20 s tras reiniciar el servidor"
 pass "reinicio limpio en ${elapsed}s y el cliente se reconecta solo"
 
+echo "== cambio de IP del servidor bajo el mismo nombre (escenario DuckDNS)"
+cp "$WORK/alice.ovpn" "$SMOKE_CLIENT_DIR/client.ovpn"
+cid=$(dc --profile test run -d --rm --no-deps client)
+for _ in $(seq 1 30); do
+    docker logs "$cid" 2>&1 | grep 'Initialization Sequence Completed' >/dev/null && break
+    sleep 1
+done
+docker logs "$cid" 2>&1 | grep 'link remote: \[AF_INET\]172.30.99.10' >/dev/null || fail "el cliente no conectó a la IP inicial"
+OVPN_USERS=alice SMOKE_SERVER_IP=172.30.99.20 dc up -d openvpn
+moved=0
+for _ in $(seq 1 60); do
+    if docker logs "$cid" 2>&1 | grep 'link remote: \[AF_INET\]172.30.99.20' >/dev/null &&
+        docker exec "$cid" ping -c 1 -W 2 10.99.0.1 >/dev/null 2>&1; then
+        moved=1 && break
+    fi
+    sleep 1
+done
+docker rm -f "$cid" >/dev/null
+((moved)) || fail "el cliente no siguió al servidor a su nueva IP"
+pass "el cliente re-resuelve el nombre y reconecta a la nueva IP del servidor"
+OVPN_USERS=alice dc up -d openvpn
+wait_healthy
+
 echo "== validación de configuración"
-if OVPN_USERS='mal usuario!' dc run --rm --no-deps -T openvpn ovpnctl users list >/dev/null 2>&1; then
+# Los contenedores efímeros usan otra IP para no chocar con la del servidor en marcha.
+out=$(OVPN_USERS='mal usuario!' SMOKE_SERVER_IP=172.30.99.30 dc run --rm --no-deps -T openvpn ovpnctl users list 2>&1) &&
     fail "aceptó un nombre de usuario inválido"
-fi
+grep 'Usuario inválido' <<<"$out" >/dev/null || fail "falló por otro motivo: $out"
 pass "rechaza usuarios inválidos"
 
 printf '\n\033[32mTodas las pruebas pasaron\033[0m\n'

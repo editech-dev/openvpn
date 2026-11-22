@@ -1,7 +1,12 @@
 # Overlay para pruebas: no publica puertos y añade un cliente OpenVPN real.
+# El servidor usa una IP fija (SMOKE_SERVER_IP) para poder simular un cambio de IP
+# bajo el mismo nombre, como ocurre con DuckDNS.
 services:
   openvpn:
     ports: !reset []
+    networks:
+      vpnnet:
+        ipv4_address: ${SMOKE_SERVER_IP:-172.30.99.10}
 
   client:
     image: ghcr.io/editech-dev/openvpn:smoke
@@ -13,4 +18,11 @@ services:
       - /dev/net/tun:/dev/net/tun
     volumes:
       - ${SMOKE_CLIENT_DIR:?}:/client:ro
+    networks: [vpnnet]
     command: ["openvpn", "--config", "/client/client.ovpn"]
+
+networks:
+  vpnnet:
+    ipam:
+      config:
+        - subnet: 172.30.99.0/24
