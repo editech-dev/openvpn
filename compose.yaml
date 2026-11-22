@@ -1,0 +1,83 @@
+# Despliegue: cp .env.example .env && editar && docker compose up -d
+# Todas las variables están documentadas en .env.example y docs/CONFIG.md.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  openvpn:
+    image: ghcr.io/editech-dev/openvpn:${OVPN_IMAGE_TAG:-latest}
+    build:
+      context: ./openvpn
+    pull_policy: ${OVPN_PULL_POLICY:-missing}
+    restart: unless-stopped
+    ports:
+      - "${OVPN_PORT:-1194}:1194/${OVPN_PROTO:-udp}"
+    environment:
+      TZ: ${TZ:-UTC}
+      DUCKDNS_SUBDOMAINS: ${DUCKDNS_SUBDOMAINS:-}
+      OVPN_HOSTNAME: ${OVPN_HOSTNAME:-}
+      OVPN_PORT: ${OVPN_PORT:-}
+      OVPN_PROTO: ${OVPN_PROTO:-}
+      OVPN_NETWORK: ${OVPN_NETWORK:-}
+      OVPN_DNS: ${OVPN_DNS:-}
+      OVPN_REDIRECT_GATEWAY: ${OVPN_REDIRECT_GATEWAY:-}
+      OVPN_PUSH_ROUTES: ${OVPN_PUSH_ROUTES:-}
+      OVPN_USERS: ${OVPN_USERS:-}
+      OVPN_REVOKE_REMOVED: ${OVPN_REVOKE_REMOVED:-}
+      OVPN_CLIENT_CERT_DAYS: ${OVPN_CLIENT_CERT_DAYS:-}
+      OVPN_SERVER_CERT_DAYS: ${OVPN_SERVER_CERT_DAYS:-}
+      OVPN_CA_DAYS: ${OVPN_CA_DAYS:-}
+      OVPN_CA_CN: ${OVPN_CA_CN:-}
+      OVPN_CIPHERS: ${OVPN_CIPHERS:-}
+      OVPN_CLIENT_TO_CLIENT: ${OVPN_CLIENT_TO_CLIENT:-}
+      OVPN_EXTRA_SERVER_CONFIG: ${OVPN_EXTRA_SERVER_CONFIG:-}
+      OVPN_VERB: ${OVPN_VERB:-}
+    volumes:
+      - ovpn-data:/etc/openvpn
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      net.ipv4.ip_forward: 1
+    # Mínimo privilegio: solo las capacidades necesarias.
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW, SETUID, SETGID, SETPCAP, CHOWN, FOWNER]
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+    logging: *logging
+
+  duckdns:
+    image: lscr.io/linuxserver/duckdns:ddf6a18c-ls98@sha256:8be3d2d20da2b4a3ec4d86eb456460ef79d791d6c7ceea865a9d01aa53ce1456
+    # Se activa con COMPOSE_PROFILES=duckdns (ver .env.example). Si usas otro DNS
+    # dinámico o IP fija, quita el perfil y define OVPN_HOSTNAME.
+    profiles: [duckdns]
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      SUBDOMAINS: ${DUCKDNS_SUBDOMAINS:-}
+      TOKEN: ${DUCKDNS_TOKEN:-}
+      UPDATE_IP: ${DUCKDNS_UPDATE_IP:-ipv4}
+      LOG_FILE: "false"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+    logging: *logging
+
+volumes:
+  ovpn-data:

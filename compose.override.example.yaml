@@ -1,0 +1,21 @@
+# Ejemplo de personalización local. Cópialo como compose.override.yaml
+# (ignorado por git); Compose lo aplica automáticamente.
+#
+# 1) Token de DuckDNS como Docker secret en lugar de variable de entorno:
+#      mkdir -p secrets && printf '%s' 'TU_TOKEN' > secrets/duckdns_token && chmod 600 secrets/duckdns_token
+#    y deja DUCKDNS_TOKEN vacío en .env.
+services:
+  duckdns:
+    environment:
+      FILE__TOKEN: /run/secrets/duckdns_token
+    secrets:
+      - duckdns_token
+
+#  2) Usar un directorio del host en lugar del volumen con nombre:
+#  openvpn:
+#    volumes:
+#      - ./data:/etc/openvpn
+
+secrets:
+  duckdns_token:
+    file: ./secrets/duckdns_token
