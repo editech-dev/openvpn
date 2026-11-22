@@ -77,6 +77,10 @@ for u in alice bob; do
         grep -qF "$tag" "$WORK/$u.ovpn" || fail "perfil de $u sin '$tag'"
     done
 done
+if grep -x 'persist-tun' "$WORK/alice.ovpn" >/dev/null; then
+    fail "el perfil incluye persist-tun: impediría re-resolver el dominio si cambia la IP"
+fi
+grep -x 'connect-retry 2 30' "$WORK/alice.ovpn" >/dev/null || fail "el perfil no limita la espera entre reintentos"
 pass "perfiles exportados con material inline"
 "$ROOT/scripts/export-clients.sh" --project-dir "$ROOT" --out "$WORK/exports" \
     -- -p ovpn-smoke --env-file "$ROOT/tests/smoke.env" -f "$ROOT/compose.yaml" -f "$ROOT/tests/compose.smoke.yaml" >/dev/null

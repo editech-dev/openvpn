@@ -36,6 +36,7 @@ services:
       OVPN_CLIENT_TO_CLIENT: ${OVPN_CLIENT_TO_CLIENT:-}
       OVPN_EXTRA_SERVER_CONFIG: ${OVPN_EXTRA_SERVER_CONFIG:-}
       OVPN_VERB: ${OVPN_VERB:-}
+      OVPN_CLIENT_PERSIST_TUN: ${OVPN_CLIENT_PERSIST_TUN:-}
     volumes:
       - ovpn-data:/etc/openvpn
     devices:

@@ -103,6 +103,9 @@ load_config() {
     : "${OVPN_CLIENT_TO_CLIENT:=false}"
     : "${OVPN_EXTRA_SERVER_CONFIG:=}"
     : "${OVPN_VERB:=3}"
+    # false (recomendado con DNS dinámico): al reconectar se retiran las rutas del túnel
+    # para poder volver a resolver el dominio si la IP del servidor cambió.
+    : "${OVPN_CLIENT_PERSIST_TUN:=false}"
 
     OVPN_PROTO=${OVPN_PROTO,,}
     [[ $OVPN_PROTO == udp || $OVPN_PROTO == tcp ]] || die "OVPN_PROTO debe ser 'udp' o 'tcp' (valor: $OVPN_PROTO)"
@@ -139,7 +142,8 @@ load_config() {
     export OVPN_DATA_DIR OVPN_RUN_DIR OVPN_PORT OVPN_PROTO OVPN_NETWORK OVPN_DNS \
         OVPN_REDIRECT_GATEWAY OVPN_PUSH_ROUTES OVPN_USERS OVPN_REVOKE_REMOVED \
         OVPN_CLIENT_CERT_DAYS OVPN_SERVER_CERT_DAYS OVPN_CA_DAYS OVPN_CA_CN \
-        OVPN_CIPHERS OVPN_CLIENT_TO_CLIENT OVPN_EXTRA_SERVER_CONFIG OVPN_VERB OVPN_HOSTNAME
+        OVPN_CIPHERS OVPN_CLIENT_TO_CLIENT OVPN_EXTRA_SERVER_CONFIG OVPN_VERB OVPN_HOSTNAME \
+        OVPN_CLIENT_PERSIST_TUN
 }
 
 # Bloqueo exclusivo para operaciones que modifican la PKI.

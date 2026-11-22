@@ -70,9 +70,9 @@ dev tun
 proto ${OVPN_PROTO}
 remote ${OVPN_HOSTNAME} ${OVPN_PORT}
 resolv-retry infinite
+connect-retry 2 30
 nobind
-persist-key
-persist-tun
+$(is_true "$OVPN_CLIENT_PERSIST_TUN" && echo persist-tun)
 remote-cert-tls server
 verify-x509-name server name
 # Evita fugas de DNS en Windows; el resto de clientes ignora la opción sin error.
