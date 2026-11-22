@@ -1,0 +1,20 @@
+name: Reporte de error
+description: Algo no funciona como se espera
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "⚠️ No pegues tokens, perfiles .ovpn, IPs públicas ni nombres reales. Revisa los logs antes de compartirlos."
+  - type: textarea
+    id: what
+    attributes: { label: Qué pasó y qué esperabas }
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes: { label: Pasos para reproducir }
+  - type: textarea
+    id: logs
+    attributes: { label: Logs (docker compose logs openvpn), render: text }
+  - type: input
+    id: version
+    attributes: { label: Versión de la imagen / commit }
