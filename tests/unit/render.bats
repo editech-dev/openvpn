@@ -42,3 +42,10 @@ setup() {
     run render_server_conf
     [[ $output == *$'max-clients 20\nduplicate-cn'* ]]
 }
+
+@test "la CRL se sirve desde OVPN_RUN_DIR (legible por nobody), no desde OVPN_DATA_DIR" {
+    load_config
+    run render_server_conf
+    [[ $output == *"crl-verify $OVPN_RUN_DIR/crl.pem"* ]]
+    [[ $output != *"crl-verify $OVPN_DATA_DIR/"* ]]
+}

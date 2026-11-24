@@ -52,8 +52,14 @@ pki_init() {
 pki_gen_crl() {
     pki_env
     easyrsa gen-crl
-    # OpenVPN baja privilegios a 'nobody' y relee la CRL en cada conexión: debe ser legible.
-    install -m 0644 "$EASYRSA_PKI/crl.pem" "$OVPN_DATA_DIR/crl.pem"
+    # OpenVPN baja privilegios a 'nobody' y relee la CRL en cada conexión, así que debe
+    # poder leerla. $OVPN_DATA_DIR es 0700 root: una CRL ahí solo se carga al arrancar y
+    # las revocaciones no surten efecto hasta reiniciar. Se publica en $OVPN_RUN_DIR (tmpfs,
+    # se regenera en cada arranque) con una copia atómica para no servir un archivo a medias.
+    mkdir -p "$OVPN_RUN_DIR"
+    install -m 0644 "$EASYRSA_PKI/crl.pem" "$OVPN_RUN_DIR/crl.pem.tmp"
+    mv -f "$OVPN_RUN_DIR/crl.pem.tmp" "$OVPN_RUN_DIR/crl.pem"
+    rm -f "$OVPN_DATA_DIR/crl.pem" # ubicación antigua: ya no se usa
 }
 
 pki_check_expiry() {

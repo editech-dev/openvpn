@@ -20,7 +20,7 @@ cert ${EASYRSA_PKI}/issued/server.crt
 key ${EASYRSA_PKI}/private/server.key
 dh none
 tls-crypt ${OVPN_DATA_DIR}/tls-crypt.key
-crl-verify ${OVPN_DATA_DIR}/crl.pem
+crl-verify ${OVPN_RUN_DIR}/crl.pem
 remote-cert-tls client
 
 tls-version-min 1.2

@@ -135,6 +135,8 @@ done
 ((gone)) || fail "alice sigue conectada tras revocarla"
 docker rm -f "$cid" >/dev/null
 pass "revoke desconecta al usuario al instante"
+# Sin reiniciar el servidor: OpenVPN (ya como 'nobody') debe releer la CRL y rechazar el perfil viejo.
+try_client alice fail
 dc exec -T openvpn ovpnctl users reissue alice
 dc exec -T openvpn ovpnctl export alice >"$WORK/alice.ovpn"
 try_client alice ok

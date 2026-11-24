@@ -4,6 +4,9 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) y 
 
 ## [Sin publicar]
 
+### Corregido
+- **Las revocaciones no surtían efecto hasta reiniciar el servidor**: la CRL vivía en `/etc/openvpn` (0700 root) y OpenVPN, ya como `nobody`, no podía releerla (`Failed to stat CRL file`). Ahora se publica en `/run/openvpn/crl.pem`, legible por `nobody`, y un usuario revocado queda rechazado al instante. La prueba end-to-end comprueba que un perfil revocado no reconecta sin reiniciar.
+
 ### Añadido
 - **Actualización automática sin GitHub** (`scripts/auto-update.sh`): reconstruye la imagen en el host con los parches de Alpine y solo la despliega si hay paquetes nuevos. Verifica que los servicios quedan sanos y, si no, vuelve a la versión anterior, congela las actualizaciones y avisa.
 - **Avisos por Telegram** (`scripts/notify.sh`, admite chat, grupo o canal): solo se publican dos mensajes, "✅ Nueva versión instalada correctamente" y "🚨 Error al actualizar", ambos con la versión anterior → nueva y los paquetes o el error.
